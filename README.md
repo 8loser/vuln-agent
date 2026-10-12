@@ -35,6 +35,18 @@ uv run jupyter lab
 ```bash
 uvx jupyter-book@2.1.7 start
 ```
+
+### 只下載單一 notebook
+
+從網頁下載單一 `.ipynb` 也能跑，先在 notebook 所在的資料夾裝好下表的套件。01、05 會呼叫 API，要在同一個資料夾建 `.env` 放入 `ANTHROPIC_API_KEY=...`。
+
+| notebook | 要裝的套件 | 備註 |
+| --- | --- | --- |
+| `01_llm_basics` | `pip install anthropic python-dotenv pydantic duckdb httpx` | 第一個程式格會在 notebook 裡定義跟 `src/vuln_agent/llm.py` 一樣的函式 |
+| `03_context_budget` | 無法單獨執行 | 會用到 `src/vuln_agent/` 裡階段 2 寫的 agent，要 clone 整個專案 |
+| `05_pdf_rag` | `pip install anthropic python-dotenv pydantic matplotlib` | PDF、embedding、BM25 的套件依各步驟的選擇再裝 |
+| `06_evals` | `pip install duckdb` | 其餘都是標準函式庫；`data/` 會建在 notebook 所在的資料夾 |
+| `08_finetune` | 第 1、2 段不用裝 | 只用標準函式庫，`data/` 會建在 notebook 所在的資料夾；第 3 段的訓練套件依步驟說明再裝 |
 ## 階段
 
 | 階段 | 技能 | 實驗 notebook |

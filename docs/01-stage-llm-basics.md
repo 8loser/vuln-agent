@@ -1,6 +1,6 @@
 # 階段 1：LLM 基本功（約 7 小時）
 
-這個階段的目標是不靠 LangChain，直接用官方 SDK 呼叫 LLM，做出作品的第一塊「問題解析器」：把中文漏洞問題轉成結構化查詢意圖，再用寫死的 SQL 查小型漏洞資料庫回答。一步一步做，每做完一步把文件裡的方框打勾。
+這個階段的目標是直接用官方 SDK 呼叫 LLM，做出作品的第一塊「問題解析器」：把中文漏洞問題轉成結構化查詢意圖，再用寫死的 SQL 查小型漏洞資料庫回答。一步一步做，每做完一步把文件裡的方框打勾。
 
 **做完後的樣子**：問 `/ask/stream`「最近 30 天影響 nginx、CVSS 7 以上而且已經被利用的漏洞？」
 
@@ -53,7 +53,7 @@ vuln-agent/
 
 ### 步驟 1：環境與第一次呼叫（約 1.5 小時）
 
-**學什麼**：不靠 LangChain，直接用官方 SDK，看懂 messages、`usage`、`stop_reason`。每次呼叫都要算錢，成本主要看輸出長度與 thinking，同樣的意思中英文 token 數其實差不多。
+**學什麼**：直接用官方 SDK，看懂 messages、`usage`、`stop_reason`。每次呼叫都要算錢，成本主要看輸出長度與 thinking，同樣的意思中英文 token 數其實差不多。
 
 實驗都在 [`notebooks/01_llm_basics.ipynb`](../notebooks/01_llm_basics.ipynb)：每項一個 Markdown 標題格加程式格，結果會存在 notebook 裡，之後打開不用重跑。少用 Run All，每次重跑都會重新呼叫 API 花錢。
 

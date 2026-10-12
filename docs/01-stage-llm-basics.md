@@ -62,7 +62,7 @@ vuln-agent/
   - 已裝的套件：`anthropic`（官方 SDK）、`python-dotenv`（從 `.env` 讀 API key）、`jupyterlab`（開發用，跑 notebook）
   - 自己從零建的話，對應的指令是 `uv init --package vuln-agent`、`uv add anthropic python-dotenv`、`uv add --dev jupyterlab`
 - [ ] 讀 [`src/vuln_agent/llm.py`](../src/vuln_agent/llm.py)：`ask()` 送訊息、`text()` 只取文字 block、`cost()` 留給你補完
-- [ ] `uv run jupyter lab` 開 notebook，做 1.1 第一次呼叫
+- [ ] `uv run jupyter lab` 開 notebook，做 1.1 第一次呼叫與回應結構
 - [ ] 1.2 中英文 token 比較
 - [ ] 1.3 穩定度與 effort
 - [ ] 1.4 補完 `cost()`，換小模型比成本

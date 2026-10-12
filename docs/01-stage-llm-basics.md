@@ -55,7 +55,7 @@ vuln-agent/
 
 **學什麼**：直接用官方 SDK，看懂 messages、`usage`、`stop_reason`。每次呼叫都要算錢，成本主要看輸出長度與 thinking，同樣的意思中英文 token 數其實差不多。同一題每次回答不一定一樣；effort 調高會多花 token 與時間，結論不一定跟著改變。
 
-實驗都在 [`notebooks/01_llm_basics.ipynb`](../notebooks/01_llm_basics.ipynb)：每項一個 Markdown 標題格加程式格，結果會存在 notebook 裡，之後打開不用重跑。少用 Run All，每次重跑都會重新呼叫 API 花錢。
+實驗都在 [`notebooks/01_llm_basics.ipynb`](../notebooks/01_llm_basics.ipynb)：每項一個 Markdown 標題格加程式格。repo 裡的 notebook 不附執行結果，每次跑的結果都可能不同；程式格後面的「觀察」是維護者某一次執行的結果，拿來對照你自己的輸出。少用 Run All，每次重跑都會重新呼叫 API 花錢。
 
 - [ ] 裝好 [`uv`](https://docs.astral.sh/uv/)，在 repo 根目錄跑 `uv sync`；建 `.env` 放 `ANTHROPIC_API_KEY`（`.env` 已在 `.gitignore`）
   - `uv`：管理 Python 版本、虛擬環境和套件；專案用 `src/` 版面，notebook 和 API 都能 `import vuln_agent`

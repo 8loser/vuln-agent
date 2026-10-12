@@ -34,7 +34,7 @@
 vuln-agent/
 ├── .env                        # 步驟 1：API key，不進 git
 ├── src/vuln_agent/
-│   ├── llm.py                  # 已提供：呼叫模型；步驟 1 補完 cost()，之後每個階段都用
+│   ├── llm.py                  # 已提供：呼叫模型與算花費，之後每個階段都用
 │   ├── intent.py               # 步驟 2：QueryIntent 與問題解析
 │   ├── queries.py              # 步驟 4：寫死的 SQL 樣板
 │   └── api.py                  # 步驟 4：FastAPI /parse、/ask、/ask/stream
@@ -61,11 +61,11 @@ vuln-agent/
   - `uv`：管理 Python 版本、虛擬環境和套件；專案用 `src/` 版面，notebook 和 API 都能 `import vuln_agent`
   - 已裝的套件：`anthropic`（官方 SDK）、`python-dotenv`（從 `.env` 讀 API key）、`jupyterlab`（開發用，跑 notebook）
   - 自己從零建的話，對應的指令是 `uv init --package vuln-agent`、`uv add anthropic python-dotenv`、`uv add --dev jupyterlab`
-- [ ] 讀 [`src/vuln_agent/llm.py`](../src/vuln_agent/llm.py)：`ask()` 送訊息、`text()` 只取文字 block、`cost()` 留給你補完
+- [ ] 讀 [`src/vuln_agent/llm.py`](../src/vuln_agent/llm.py)：`ask()` 送訊息、`text()` 只取文字 block、`cost()` 把 `usage` 換算成美元
 - [ ] `uv run jupyter lab` 開 notebook，做 1.1 第一次呼叫與回應結構
 - [ ] 1.2 中英文 token 比較
 - [ ] 1.3 穩定度與 effort
-- [ ] 1.4 補完 `cost()`，換小模型比成本
+- [ ] 1.4 換小模型比成本
 
 模型名稱與價格以[官方模型列表](https://platform.claude.com/docs/en/about-claude/models/overview)與[定價頁](https://platform.claude.com/docs/en/about-claude/pricing)為準。
 

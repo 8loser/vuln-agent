@@ -87,7 +87,7 @@ def make_case(tpl, params, conn):
 
 - [ ] 沿用步驟 1 接好的 tracing，加上 prompt caching 命中率：記下每個請求的快取讀取 / 寫入 tokens，比較開快取前後的成本與首字延遲
 - [ ] 修完問題後重跑一次步驟 1 的 50 題，看各失敗類型的次數有沒有下降，更新 `evals/error_analysis.md`
-- [ ] 把階段 1 寫的 `cost(usage, model)` 接上，每個請求算總花費；評測跑完時輸出 p50、p95 延遲與每題平均成本
+- [ ] 把 `llm.py` 的 `cost(usage, model)` 接上，每個請求算總花費；評測跑完時輸出 p50、p95 延遲與每題平均成本
 - [ ] 讓評測結果每題帶 trace id，答錯的題目可以直接點進 trace 看是哪一步出錯
 - [ ] 挑 3 題答錯的題目，從 trace 找出原因並修好，修完重跑評測確認數字變化
 

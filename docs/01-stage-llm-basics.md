@@ -26,9 +26,9 @@
 | EPSS | FIRST 每天發布的機率（0–1），預測 CVE 未來 30 天被利用的可能性 | `epss` 表、`min_epss` 條件、排序第二層 |
 | DuckDB | 單檔的嵌入式 SQL 資料庫，不用架伺服器 | 放三張表；階段 2 換成 PostgreSQL |
 
-### 本階段新增的檔案
+### 本階段用到的檔案
 
-整個學習路線共用同一個 repo，各資料夾的用途見總覽的「Repo 結構」。標「已提供」的是 repo 裡已經有的起點，其餘是這個階段要新增的：
+整個學習路線共用同一個 repo，各資料夾的用途見總覽的「Repo 結構」。標「已提供」的是 repo 裡已經有的檔案，其餘由這個階段新增：
 
 ```text
 vuln-agent/
@@ -53,7 +53,7 @@ vuln-agent/
 
 ### 步驟 1：環境與第一次呼叫（約 1.5 小時）
 
-**學什麼**：直接用官方 SDK，看懂 messages、`usage`、`stop_reason`。每次呼叫都要算錢，成本主要看輸出長度與 thinking，同樣的意思中英文 token 數其實差不多。
+**學什麼**：直接用官方 SDK，看懂 messages、`usage`、`stop_reason`。每次呼叫都要算錢，成本主要看輸出長度與 thinking，同樣的意思中英文 token 數其實差不多。同一題每次回答不一定一樣；effort 調高會多花 token 與時間，結論不一定跟著改變。
 
 實驗都在 [`notebooks/01_llm_basics.ipynb`](../notebooks/01_llm_basics.ipynb)：每項一個 Markdown 標題格加程式格，結果會存在 notebook 裡，之後打開不用重跑。少用 Run All，每次重跑都會重新呼叫 API 花錢。
 
@@ -62,12 +62,10 @@ vuln-agent/
   - 已裝的套件：`anthropic`（官方 SDK）、`python-dotenv`（從 `.env` 讀 API key）、`jupyterlab`（開發用，跑 notebook）
   - 自己從零建的話，對應的指令是 `uv init --package vuln-agent`、`uv add anthropic python-dotenv`、`uv add --dev jupyterlab`
 - [ ] 讀 [`src/vuln_agent/llm.py`](../src/vuln_agent/llm.py)：`ask()` 送訊息、`text()` 只取文字 block、`cost()` 留給你補完
-- [ ] `uv run jupyter lab` 開 notebook，送「CVSS 和 EPSS 差在哪？」，看回應、`stop_reason`、`usage`
-- [ ] 同一問題中英文各送一次，比較 token 數
-
-  預期會看到：扣掉 `thinking_tokens` 後，中英文回答的 token 數接近，差異主要來自模型這次有沒有 thinking。只跑一次雜訊很大，要比語言本身就用 `count_tokens` 只計算同一段內容的中英文版本：中文每個字約 1 個多 token，英文約 2 到 3 個字母 1 個 token，但同樣的意思兩者只差幾個百分點。
-- [ ] 同一題跑 3 次看回答差多少；再用 `output_config={"effort": "low"}` 和 `"high"` 各跑一次，比較 `output_tokens` 與耗時。新模型已不支援調 `temperature`（只接受預設值），輸出穩不穩靠的是步驟 2 的 structured outputs，詳見[官方文件](https://platform.claude.com/docs/en/api/messages/create)
-- [ ] 補完 `cost()`，換小模型再跑一次，比較花費；notebook 裡有一格會先用假的 usage 檢查你的 `cost()`
+- [ ] `uv run jupyter lab` 開 notebook，做 1.1 第一次呼叫
+- [ ] 1.2 中英文 token 比較
+- [ ] 1.3 穩定度與 effort
+- [ ] 1.4 補完 `cost()`，換小模型比成本
 
 模型名稱與價格以[官方模型列表](https://platform.claude.com/docs/en/about-claude/models/overview)與[定價頁](https://platform.claude.com/docs/en/about-claude/pricing)為準。
 
@@ -77,8 +75,8 @@ vuln-agent/
 
 - [ ] `uv add pydantic`；在 `src/vuln_agent/intent.py` 定義 `QueryIntent`，`cve_id` 用 regex 驗證格式；`intent` 先做 4 種：`cve_lookup`、`search`、`count`、`unsupported`（要求攻擊程式、範圍外問題）
 - [ ] 寫 `parse(question)`：用 structured outputs 讓模型直接回傳 `QueryIntent`，Pydantic 驗證失敗就把錯誤丟回模型重試一次
-- [ ] 在 notebook 用 strict tool use（`tool_choice` 用預設的 auto，在 prompt 要求呼叫工具）寫一版對照，比較兩者的失敗率與 token 數
-- [ ] 在 notebook 測俗稱（log4shell）、相對時間（上禮拜）、模糊條件、要求 exploit、無關問題
+- [ ] notebook 2.2：用 strict tool use 寫一版對照，比較兩者的失敗率與 token 數
+- [ ] notebook 2.3：測刁鑽問題
 
 ### 步驟 3：準備漏洞資料（約 1 小時）
 
@@ -87,10 +85,9 @@ vuln-agent/
 - [ ] `uv add duckdb httpx`（`data/` 已在 `.gitignore`）；`NVD_API_KEY` 選用，有的話速率限制寬鬆很多
 - [ ] 補完 [`scripts/load_data.py`](../scripts/load_data.py) 的 4 個 TODO，用 `uv run scripts/load_data.py` 把 NVD 最近 90 天、CISA KEV、EPSS 抓進 DuckDB。資料庫不用另外建：第一次執行時 `duckdb.connect("data/vuln.duckdb")` 會自動建檔，三張表由腳本裡的 `CREATE OR REPLACE TABLE` 建立
 
-  這份骨架還沒在真實網路環境完整驗證過，網址與欄位以 NVD、CISA、FIRST 官方文件為準，第一次跑可能要除錯。提示：EPSS 有幾十萬筆，`executemany` 會慢，可以改用 DuckDB 的 `read_csv` 直接讀。
-- [ ] 手寫 3 條 SQL：查單一 CVE、篩「CVSS ≥ 9 且在 KEV 裡」並依 EPSS 排序、統計各 severity 數量
-- [ ] 在 notebook 不給資料直接問「最近一週有哪些 nginx 的 CVE？」，拿回答裡的 CVE 編號去 DuckDB 查，記下有幾個是編的
-- [ ] 記下三張表各有幾筆、3 條 SQL 的結果、模型編出幾個 CVE
+  提示：EPSS 有幾十萬筆，`executemany` 會慢，可以改用 DuckDB 的 `read_csv` 直接讀。
+- [ ] notebook 3.1：手寫 3 條 SQL
+- [ ] notebook 3.2：不給資料直接問模型，記下它編了幾個 CVE
 
 ### 步驟 4：串起來：SQL 樣板、FastAPI 與串流（約 2 小時）
 

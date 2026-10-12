@@ -1,0 +1,36 @@
+# See docs at: https://mystmd.org/guide/frontmatter
+version: 1
+project:
+  id: fc9e614b-e53b-4fb0-bc77-0b0564ecb61b
+  title: vuln-agent 學習路線
+  description: AI 應用工程師學習路線：從零做出弱點分析 Agent
+  # keywords: []
+  # authors: []
+  # github:
+  # 只有 toc 列出的檔案會發布成網站；README、CLAUDE*.md 不會
+  toc:
+    - file: docs/00-overview.md
+    - title: 階段
+      children:
+        - file: docs/01-stage-llm-basics.md
+        - file: docs/02-stage-agent-data-pipeline.md
+        - file: docs/03-stage-harness-1.md
+        - file: docs/04-stage-harness-2.md
+        - file: docs/05-stage-docs-rag.md
+        - file: docs/06-stage-evals-observability.md
+        - file: docs/07-stage-llm-security.md
+        - file: docs/08-stage-finetune.md
+        - file: docs/09-stage-deploy.md
+    - title: 實驗 notebook
+      children:
+        - file: notebooks/01_llm_basics.ipynb
+        - file: notebooks/03_context_budget.ipynb
+        - file: notebooks/05_pdf_rag.ipynb
+        - file: notebooks/06_evals.ipynb
+        - file: notebooks/08_finetune.ipynb
+    
+site:
+  template: book-theme
+  # options:
+  #   favicon: favicon.ico
+  #   logo: site_logo.png

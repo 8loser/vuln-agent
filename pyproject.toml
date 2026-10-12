@@ -1,0 +1,25 @@
+[project]
+name = "vuln-agent"
+version = "0.1.0"
+description = "AI 應用工程師學習路線：從零做出弱點分析 Agent"
+readme = "README.md"
+authors = [
+    { name = "8loser", email = "8loser@users.noreply.github.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "anthropic>=1.13.0",
+    "python-dotenv>=1.2.4",
+]
+
+[project.scripts]
+vuln-agent = "vuln_agent:main"
+
+[build-system]
+requires = ["uv_build>=0.13.0,<0.14.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "jupyterlab>=4.6.4",
+]

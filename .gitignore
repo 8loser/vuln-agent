@@ -1,0 +1,22 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# 機密與本機資料
+.env
+data/
+CLAUDE.md
+CLAUDE.local.md
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Jupyter Book 建置輸出
+_build/

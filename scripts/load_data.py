@@ -1,4 +1,4 @@
-import gzip, io, csv, os
+import os, time
 from datetime import datetime, timedelta, timezone
 import duckdb, httpx
 from dotenv import load_dotenv
@@ -7,35 +7,65 @@ load_dotenv()
 os.makedirs("data", exist_ok=True)
 db = duckdb.connect("data/vuln.duckdb")
 
-def load_nvd(days=90):
+NVD_KEY = os.getenv("NVD_API_KEY")
+# NVD 速率限制：沒有 key 每 30 秒 5 次（官方建議每次間隔 6 秒），有 key 每 30 秒 50 次
+NVD_SLEEP = 0.6 if NVD_KEY else 6
+
+def nvd_get(params):
+    """呼叫 NVD API；被限速或伺服器忙碌時等 30 秒（一個速率限制窗口）再試，最多 5 次。"""
+    headers = {"apiKey": NVD_KEY} if NVD_KEY else {}
+    for attempt in range(5):
+        r = httpx.get("https://services.nvd.nist.gov/rest/json/cves/2.0",
+                      params=params, headers=headers, timeout=60)
+        # 官方文件沒寫限速時回哪個狀態碼，403、429、503 都當成要等一下再試
+        if r.status_code not in (403, 429, 503):
+            r.raise_for_status()
+            return r.json()
+        time.sleep(30)
+    r.raise_for_status()
+
+def cvss(metrics):
+    """取 CVSS 分數與等級：優先 v3.1，沒有就用 v4.0、v3.0；同一版本優先用 NVD 自己評的 Primary。"""
+    for key in ("cvssMetricV31", "cvssMetricV40", "cvssMetricV30"):
+        items = metrics.get(key)
+        if items:
+            m = next((i for i in items if i["type"] == "Primary"), items[0])
+            return m["cvssData"]["baseScore"], m["cvssData"]["baseSeverity"]
+    return None, None
+
+def cwes(weaknesses):
+    """取 CWE 編號，略過 NVD-CWE-Other、NVD-CWE-noinfo 這兩個佔位值。"""
+    ids = {d["value"] for w in weaknesses for d in w["description"] if d["value"].startswith("CWE-")}
+    return ",".join(sorted(ids)) or None
+
+def cpes(configurations):
+    """取受影響產品的 CPE 字串；vulnerable 為 false 的是執行平台，不是有漏洞的產品。"""
+    found = {m["criteria"] for c in configurations for n in c["nodes"]
+             for m in n["cpeMatch"] if m["vulnerable"]}
+    return " ".join(sorted(found)) or None
+
+def load_nvd(days=90):  # NVD 一次查詢的日期範圍最多 120 天
     end = datetime.now(timezone.utc)
     start = end - timedelta(days=days)
-    headers = {"apiKey": os.environ["NVD_API_KEY"]} if os.getenv("NVD_API_KEY") else {}
     rows, start_index = [], 0
     while True:
-        r = httpx.get(
-            "https://services.nvd.nist.gov/rest/json/cves/2.0",
-            params={
-                "pubStartDate": start.strftime("%Y-%m-%dT%H:%M:%S.000"),
-                "pubEndDate": end.strftime("%Y-%m-%dT%H:%M:%S.000"),
-                "startIndex": start_index,
-                "resultsPerPage": 2000,
-            },
-            headers=headers, timeout=60,
-        )
-        r.raise_for_status()
-        data = r.json()
+        data = nvd_get({
+            "pubStartDate": start.strftime("%Y-%m-%dT%H:%M:%S.000"),
+            "pubEndDate": end.strftime("%Y-%m-%dT%H:%M:%S.000"),
+            "startIndex": start_index,
+            "resultsPerPage": 2000,
+        })
         for item in data["vulnerabilities"]:
             cve = item["cve"]
             desc = next((d["value"] for d in cve["descriptions"] if d["lang"] == "en"), "")
-            # TODO 1：從 cve["metrics"] 取 CVSS v3.1 的 baseScore、baseSeverity（可能不存在）
-            # TODO 2：從 cve["weaknesses"] 取 CWE 編號
-            # TODO 3：從 cve["configurations"] 取 CPE 字串，串成 products
-            rows.append((cve["id"], cve["published"], desc, None, None, None, None))
+            score, severity = cvss(cve.get("metrics", {}))
+            rows.append((cve["id"], cve["published"], desc, score, severity,
+                         cwes(cve.get("weaknesses", [])), cpes(cve.get("configurations", []))))
         start_index += data["resultsPerPage"]
+        print(f"NVD {min(start_index, data['totalResults'])} / {data['totalResults']}")
         if start_index >= data["totalResults"]:
             break
-        # TODO 4：沒有 API key 時要 sleep；處理 403 / 503 重試
+        time.sleep(NVD_SLEEP)
     db.execute("CREATE OR REPLACE TABLE cve (cve_id TEXT, published TIMESTAMP, description TEXT, "
                "cvss_score DOUBLE, severity TEXT, cwe TEXT, products TEXT)")
     db.executemany("INSERT INTO cve VALUES (?, ?, ?, ?, ?, ?, ?)", rows)
@@ -50,14 +80,14 @@ def load_kev():
     db.executemany("INSERT INTO kev VALUES (?, ?, ?, ?, ?)", rows)
 
 def load_epss():
-    day = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
-    url = f"https://epss.cyentia.com/epss_scores-{day}.csv.gz"
-    raw = gzip.decompress(httpx.get(url, timeout=120, follow_redirects=True).content).decode()
-    lines = [l for l in raw.splitlines() if not l.startswith("#")]
-    reader = csv.DictReader(io.StringIO("\n".join(lines)))
-    rows = [(r["cve"], float(r["epss"]), float(r["percentile"])) for r in reader]
-    db.execute("CREATE OR REPLACE TABLE epss (cve_id TEXT, epss DOUBLE, percentile DOUBLE)")
-    db.executemany("INSERT INTO epss VALUES (?, ?, ?)", rows)
+    # 每天更新的全量檔；第一行是 #model_version 註解，第二行才是欄位名稱 cve,epss,percentile
+    url = "https://epss.empiricalsecurity.com/epss_scores-current.csv.gz"
+    path = "data/epss_scores-current.csv.gz"
+    with open(path, "wb") as f:
+        f.write(httpx.get(url, timeout=120, follow_redirects=True).content)
+    # 幾十萬筆用 executemany 很慢，直接讓 DuckDB 讀 gzip CSV
+    db.execute("CREATE OR REPLACE TABLE epss AS "
+               "SELECT cve AS cve_id, epss, percentile FROM read_csv(?, skip=1, header=true)", [path])
 
 if __name__ == "__main__":
     load_kev(); load_epss(); load_nvd()

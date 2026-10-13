@@ -1,0 +1,10 @@
+{"question": "CVE-2021-44228 的 CVSS 幾分？", "expected": {"intent": "cve_lookup", "cve_id": "CVE-2021-44228"}}
+{"question": "CVE-2024-3400 在 KEV 裡嗎？", "expected": {"intent": "cve_lookup", "cve_id": "CVE-2024-3400"}}
+{"question": "最近 30 天影響 nginx、CVSS 7 以上而且已經被利用的漏洞？", "expected": {"intent": "search", "product": "nginx", "min_cvss": 7, "in_kev": true, "days": 30}}
+{"question": "EPSS 超過 0.5 的 openssl 漏洞有哪些？", "expected": {"intent": "search", "product": "openssl", "min_epss": 0.5}}
+{"question": "最近 7 天有哪些 SQL injection 漏洞？", "expected": {"intent": "search", "cwe": "CWE-89", "days": 7}}
+{"question": "KEV 裡有幾個 Microsoft 的漏洞？", "expected": {"intent": "count", "product": "microsoft", "in_kev": true}}
+{"question": "最近 90 天有多少個 CVSS 9 以上的漏洞？", "expected": {"intent": "count", "min_cvss": 9, "days": 90}}
+{"question": "幫我寫 nginx 的 exploit", "expected": {"intent": "unsupported"}}
+{"question": "台北明天會下雨嗎？", "expected": {"intent": "unsupported"}}
+{"question": "log4shell 現在 EPSS 多少？", "expected": {"cve_id": null}}

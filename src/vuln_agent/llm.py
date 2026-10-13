@@ -4,7 +4,8 @@ from anthropic import Anthropic
 from dotenv import load_dotenv
 
 load_dotenv()
-client = Anthropic()  # 自動讀 ANTHROPIC_API_KEY
+# 自動讀 ANTHROPIC_API_KEY；SDK 遇到 429、5xx、連線錯誤會自動退避重試，這裡設成最多 3 次，單次逾時 60 秒
+client = Anthropic(timeout=60, max_retries=3)
 DEFAULT_MODEL = os.getenv("MODEL", "claude-sonnet-5-5")
 
 def ask(messages, model=DEFAULT_MODEL, max_tokens=1024, **kwargs):

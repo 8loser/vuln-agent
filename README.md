@@ -1,6 +1,6 @@
 # vuln-agent：從零做出弱點分析 Agent 的 AI 應用工程師學習路線
 
-一條給後端工程師的 AI 應用工程師（AI Engineer）學習路線。9 個階段、約 122 小時，每個階段學一個核心技能，同時替同一個作品加上一塊，最後做出一個能 demo 的**弱點分析 Agent**（防守方資安工具）：
+一條給後端工程師的 AI 應用工程師（AI Engineer）學習路線。9 個階段，每個階段學一個核心技能，同時替同一個作品加上一塊，最後做出一個能 demo 的**弱點分析 Agent**（防守方資安工具）：
 
 - 匯入 ZAP / Trivy 掃描報告與滲透測試 PDF，統一格式並去重
 - 對照 NVD / CISA KEV / EPSS 排出修補優先順序，並說明理由
@@ -28,7 +28,7 @@ echo "ANTHROPIC_API_KEY=sk-ant-..." > .env
 uv run jupyter lab
 ```
 
-先讀 [`docs/00-overview.md`](docs/00-overview.md) 看全貌，再從[階段 1](docs/01-stage-llm-basics.md) 照打勾清單往下做。這個 repo 本身就是起手專案：在同一個 repo 裡一路做完，做完一項就把文件裡的 `[ ]` 改成 `[x]`。
+先讀 [`docs/00-overview.md`](docs/00-overview.md) 看全貌，再從[階段 1](docs/01-stage-llm-basics.md) 照步驟往下做。程式都已經寫好：每個階段先讀文件了解要理解什麼，再讀對應的程式、跑 notebook 的實驗。
 
 想用網頁版閱讀，可以在本機預覽（用 [Jupyter Book](https://jupyterbook.org/) 建置，notebook 不會被執行）：
 
@@ -54,10 +54,10 @@ uvx jupyter-book@2.1.7 start
 
 | 路徑 | 內容 |
 | --- | --- |
-| `docs/` | 總覽與各階段文件：目標、概念、可打勾的步驟、完成標準 |
-| `notebooks/` | 有實驗性質的階段各一份 notebook，標 `TODO` 的是練習 |
-| `src/vuln_agent/` | 作品本身的程式，起始只有 `llm.py` |
-| `scripts/` | 手動執行的工具，起始只有抓資料的 `load_data.py` 骨架 |
+| `docs/` | 總覽與各階段文件：目標、概念、步驟、完成標準 |
+| `notebooks/` | 有實驗性質的階段各一份 notebook，用實驗觀察程式與模型的行為 |
+| `src/vuln_agent/` | 作品本身的程式 |
+| `scripts/` | 手動執行的工具，如抓資料的 `load_data.py` |
 
 ## 規則
 

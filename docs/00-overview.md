@@ -2,7 +2,7 @@
 
 ## 總覽
 
-分 9 個階段、總共約 122 小時，邊學 AI 應用工程師的核心技能，邊做出一個能放進作品集、可以現場 demo 的作品：**弱點分析 Agent**（防守方資安工具）。照順序做，每個階段標了預估時數，依自己的時間調整。每個階段學一個技能，同時替作品加上一塊。
+分 9 個階段，邊學 AI 應用工程師的核心技能，邊做出一個能放進作品集、可以現場 demo 的作品：**弱點分析 Agent**（防守方資安工具）。照順序做，每個階段學一個技能，同時替作品加上一塊。
 
 **最終作品**：上傳 ZAP、Trivy 掃描報告或滲透測試 PDF，Agent 合併去重、對照 NVD / CISA KEV / EPSS 排出修補優先順序，用中文回答漏洞問題，修補建議附 OWASP / CWE 引用，開工單前要人工確認。評測集證明它答得對；QLoRA 微調、自架的開源小模型負責 text-to-SQL，因為弱掃資料不能出公司。測試目標只用自己架的 Juice Shop / DVWA 和自己的 Docker image。
 
@@ -14,31 +14,31 @@
 
 ## 階段一覽
 
-| 階段（預估） | 學的技能 | 替作品加上的那一塊 | 實驗 notebook |
+| 階段 | 學的技能 | 替作品加上的那一塊 | 實驗 notebook |
 | --- | --- | --- | --- |
-| [1（7h）](01-stage-llm-basics.md) | LLM API 基本功、structured output、串流、成本 | 問題解析器：漏洞問題轉 JSON，寫死的 SQL 查小型漏洞資料庫；前 10 題測試題 | [01_llm_basics](../notebooks/01_llm_basics.ipynb) |
-| [2（12h）](02-stage-agent-data-pipeline.md) | Tool use、手寫 agent loop、工具設計、資料管線 | Agent 雛形：ETL 進 PostgreSQL；`cve_lookup`、`search_vulns`、`prioritize`、`run_sql`（唯讀）；第一版最小評測進 CI | |
-| [3（8h）](03-stage-harness-1.md) | Harness（一）：context 管理、狀態與檢查點、權限與 hooks | 長報告 context 壓縮與 token 預算、中斷續跑、工具權限分級、執行前後 hooks | [03_context_budget](../notebooks/03_context_budget.ipynb) |
-| [4（12h）](04-stage-harness-2.md) | Harness（二）：subagent、MCP、框架比較 | 報告解析與情資查詢子 agent；MCP server；用 SDK 重寫一版做比較 | |
-| [5（16h）](05-stage-docs-rag.md) | 文件處理、RAG | 滲透測試 PDF 擷取；OWASP / CWE / 廠商公告 RAG，附引用 | [05_pdf_rag](../notebooks/05_pdf_rag.ipynb) |
-| [6（22h）](06-stage-evals-observability.md) | Evals 與可觀測性（重點） | 先做 error analysis；自動產生 200 題以上評測集；SQL 正確率、CVE 幻覺率、擷取正確率；CI；tracing | [06_evals](../notebooks/06_evals.ipynb) |
-| [7（8h）](07-stage-llm-security.md) | LLM 資安、治理、人工確認 | SQL 唯讀、prompt injection 測試、拒絕產生攻擊程式、人工確認、稽核 log | |
-| [8（25h）](08-stage-finetune.md) | 開源模型、QLoRA 微調 | 微調 text-to-SQL，對大模型 API 比正確率、延遲、成本 | [08_finetune](../notebooks/08_finetune.ipynb) |
-| [9（12h）](09-stage-deploy.md) | 自架推論、私有化部署、產品化 | vLLM 自架、Docker 部署到雲端（mTLS）、Web UI、README 與 demo 影片 | |
+| [1](01-stage-llm-basics.md) | LLM API 基本功、structured output、串流、成本 | 問題解析器：漏洞問題轉 JSON，寫死的 SQL 查小型漏洞資料庫；前 10 題測試題 | [01_llm_basics](../notebooks/01_llm_basics.ipynb) |
+| [2](02-stage-agent-data-pipeline.md) | Tool use、手寫 agent loop、工具設計、資料管線 | Agent 雛形：ETL 進 PostgreSQL；`cve_lookup`、`search_vulns`、`prioritize`、`run_sql`（唯讀）；第一版最小評測進 CI | |
+| [3](03-stage-harness-1.md) | Harness（一）：context 管理、狀態與檢查點、權限與 hooks | 長報告 context 壓縮與 token 預算、中斷續跑、工具權限分級、執行前後 hooks | [03_context_budget](../notebooks/03_context_budget.ipynb) |
+| [4](04-stage-harness-2.md) | Harness（二）：subagent、MCP、框架比較 | 報告解析與情資查詢子 agent；MCP server；用 SDK 重寫一版做比較 | |
+| [5](05-stage-docs-rag.md) | 文件處理、RAG | 滲透測試 PDF 擷取；OWASP / CWE / 廠商公告 RAG，附引用 | [05_pdf_rag](../notebooks/05_pdf_rag.ipynb) |
+| [6](06-stage-evals-observability.md) | Evals 與可觀測性（重點） | 先做 error analysis；自動產生 200 題以上評測集；SQL 正確率、CVE 幻覺率、擷取正確率；CI；tracing | [06_evals](../notebooks/06_evals.ipynb) |
+| [7](07-stage-llm-security.md) | LLM 資安、治理、人工確認 | SQL 唯讀、prompt injection 測試、拒絕產生攻擊程式、人工確認、稽核 log | |
+| [8](08-stage-finetune.md) | 開源模型、QLoRA 微調 | 微調 text-to-SQL，對大模型 API 比正確率、延遲、成本 | [08_finetune](../notebooks/08_finetune.ipynb) |
+| [9](09-stage-deploy.md) | 自架推論、私有化部署、產品化 | vLLM 自架、Docker 部署到雲端（mTLS）、Web UI、README 與 demo 影片 | |
 
-每個階段一份文件：目標、概念、可打勾的步驟、完成標準。有實驗性質的階段另附一份 notebook，Markdown 格說明、程式格可以直接跑，標 `TODO` 的是要你完成的練習；應用程式、部署為主的階段直接照文件寫進 `src/`。
+每個階段一份文件：目標、概念、步驟、完成標準。程式都已經寫好，文件說明每一步要理解什麼、該讀哪些程式；有實驗性質的階段另附一份 notebook，Markdown 格說明用到哪些程式，程式格直接跑，用實驗觀察程式與模型的行為。
 
 ### Repo 結構
 
-這個 repo 本身就是起手專案：fork 之後在同一個 repo 一路做完，每個階段往裡面加東西；各階段文件的「本階段用到的檔案」列出該階段用到與新增的檔案。
+這個 repo 包含整個作品的程式；各階段文件的「本階段用到的檔案」列出該階段用到的檔案。
 
 | 資料夾 | 放什麼 |
 | --- | --- |
 | `docs/` | 各階段的教學文件 |
 | `notebooks/` | 各階段的實驗 notebook，用階段編號命名，如 `01_llm_basics.ipynb` |
-| `src/vuln_agent/` | 作品本身的程式：呼叫模型、解析、工具、API。起始只有 `llm.py`（含 TODO） |
-| `scripts/` | 手動執行的工具，如抓資料的 `load_data.py`（含 TODO） |
-| `evals/` | 測試題與評測腳本，從階段 1 步驟 5 開始建立 |
+| `src/vuln_agent/` | 作品本身的程式：呼叫模型、解析、工具、API |
+| `scripts/` | 手動執行的工具，如抓資料的 `load_data.py` |
+| `evals/` | 測試題與評測腳本，從階段 1 步驟 5 開始使用 |
 | `data/` | 下載的資料與本機資料庫，不進 git |
 
 所有指令都在 repo 根目錄執行。
@@ -101,14 +101,13 @@
 
 **不做**：產生攻擊程式、對未授權目標掃描、自動修改正式環境、帳號與付費。
 
-### 延伸功能：攻擊鏈分析與管理層摘要（主線完成後再做，約 12 到 16 小時）
+### 延伸功能：攻擊鏈分析與管理層摘要（主線完成後再做）
 
 要解決的問題：弱掃報告一筆一筆列，各自看都是「中風險」，但串起來可能是「外網一個 SSRF，讀到雲端憑證，再進到資料庫」。管理層看不到這條路，就不會撥資源修。
 
 - **F13 攻擊鏈分析**：用圖把弱點和資產建模（哪台主機、是否對外、有什麼權限、能連到哪裡），由程式計算「從外網走到重要資料」的路徑。路徑是算出來的，不是 LLM 想像的，延續「答案是算出來的」這個核心亮點。
 - **F14 管理層摘要**：LLM 只根據算出的路徑，用商業語言寫一頁報告：可能損失什麼、哪一個修補能切斷最多條路徑、大概要花多少工。摘要裡的每條路徑和弱點都要對得回計算結果。
 - **範圍**：屬於防守方的攻擊路徑分析，只描述風險和修補點，不產生攻擊程式，資產資料一樣只用自己的靶機和環境。
-- **時數**：粗估 12 到 16 小時，還沒細排；不算進主線的約 122 小時，主線階段和時數不變。
 
 ### 資料來源
 

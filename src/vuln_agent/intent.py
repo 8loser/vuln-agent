@@ -48,6 +48,8 @@ def parse(question: str, model: str = DEFAULT_MODEL, usages: list | None = None)
                                       messages=messages, output_config={"format": FORMAT})
         if usages is not None:
             usages.append(resp.usage)
+        if resp.stop_reason == "refusal":  # 模型拒答時回答是空的，改走跟 SYSTEM 規則一樣的 unsupported
+            return QueryIntent(intent="unsupported", reason="模型拒絕回答這個問題")
         try:
             return QueryIntent.model_validate_json(text(resp))
         except ValidationError as e:

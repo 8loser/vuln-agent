@@ -69,6 +69,17 @@ vuln-agent/
 
 - 讀 [`src/vuln_agent/intent.py`](../src/vuln_agent/intent.py)，各部分的說明在 notebook 步驟 2 的開頭
 
+拿結構化 JSON 有兩種做法，用的是同一份 JSON Schema，差在 schema 放在哪裡、結果從哪裡取：
+
+| 面向 | `output_config.format`（notebook 2.1，`parse()`） | strict tool use（notebook 2.2） |
+|---|---|---|
+| schema 放在 | `output_config.format` | 工具的 `input_schema`，加上 `strict: True` |
+| 一定拿得到結果嗎 | 是，回答本身就照 schema 輸出 | 要模型呼叫工具才有；`tool_choice` 用 auto 時，模型可以選擇不呼叫 |
+| 格式保證 | constrained decoding 保證回答符合 schema | `strict: True` 保證工具參數符合 schema |
+| 取結果 | text block 裡的 JSON 字串，用 `model_validate_json()` 驗證 | `tool_use` block 的 `.input`（dict），用 `model_validate()` 驗證 |
+| 程式量 | 少，送出 schema、驗證回答即可 | 多，要定義工具、在 system prompt 要求呼叫、處理沒呼叫的情況 |
+| 適合的情境 | 每次都要一份固定結構的輸出，例如解析問題 | 模型有多個工具可選，由它決定用哪個、填什麼參數，也就是階段 2 agent 的寫法 |
+
 ### 步驟 3：準備漏洞資料
 
 這一步要理解為什麼漏洞情資一定要從資料庫查，這也是整個作品的核心理由。模型會憑記憶答出 CVE 編號，看起來合理，但不保證每個都存在；把 NVD、CISA KEV、EPSS 抓進 DuckDB 之後，就能逐一查證模型的回答。步驟 4 的 SQL 樣板查的就是這三張表，階段 6 會把「編造 CVE 的比率」變成評測指標。先跑 `load_data.py` 建好資料庫，再做 notebook 的步驟 3。

@@ -36,6 +36,7 @@ vuln-agent/
 ├── src/vuln_agent/
 │   ├── llm.py                  # 步驟 1：呼叫模型與算花費，之後每個階段都用
 │   ├── intent.py               # 步驟 2：QueryIntent 與問題解析
+│   ├── nvd.py                  # 步驟 3：呼叫 NVD API，抓資料與查證 CVE 共用
 │   ├── queries.py              # 步驟 4：寫死的 SQL 樣板
 │   └── api.py                  # 步驟 4：FastAPI /parse、/ask、/ask/stream
 ├── notebooks/
@@ -84,13 +85,24 @@ vuln-agent/
 
 這一步要理解為什麼漏洞情資一定要從資料庫查，這也是整個作品的核心理由。模型會憑記憶答出 CVE 編號，看起來合理，但不保證每個都存在；把 NVD、CISA KEV、EPSS 抓進 DuckDB 之後，就能逐一查證模型的回答。步驟 4 的 SQL 樣板查的就是這三張表，階段 6 會把「編造 CVE 的比率」變成評測指標。先跑 `load_data.py` 建好資料庫，再做 notebook 的步驟 3。
 
+三份資料都是公開的官方來源，不用登入就能下載：
+
+| 資料 | `load_data.py` 抓的網址 | 維護單位 | 為什麼有這些資料 |
+| --- | --- | --- | --- |
+| NVD | `https://services.nvd.nist.gov/rest/json/cves/2.0`（CVE API 2.0） | 美國 NIST | CVE 編號與描述由 CVE Program 發布，實際分配編號的是廠商、資安研究單位這些 CNA（CVE Numbering Authority）。NVD 收錄每一筆 CVE，NIST 再分析補上 CVSS、CWE、CPE；CNA 自己評的 CVSS 也一起收錄，標成 `Secondary` |
+| CISA KEV | `https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json` | 美國 CISA | CISA 依約束性作業指令 BOD 22-01 建立這份清單，要求聯邦機關在 `dueDate` 前修補。收錄要同時符合三個條件：有 CVE 編號、有可靠證據顯示已在實際環境被利用、有明確的修補方式，只有公開 PoC 的不收 |
+| EPSS | `https://epss.empiricalsecurity.com/epss_scores-current.csv.gz` | FIRST（全球資安事件應變組織論壇）的 EPSS SIG | 模型用資料夥伴的感測器偵測到的實際攻擊活動訓練，每天依 exploit 程式碼是否公開、有沒有偵測特徵、被討論的程度和 CVE 本身的特性算出機率。分數由 Empirical Security 產生並託管，[FIRST 的資料頁](https://www.first.org/epss/data)就連到這個網址 |
+
+NIST 自 2026 年 4 月起只優先分析部分 CVE，例如列在 KEV 裡的、聯邦政府使用的軟體，其他的狀態標成 `Deferred`（說明見 [NVD 首頁](https://www.nist.gov/itl/nvd)）。所以很多新 CVE 只有 CNA 評的 CVSS，`products` 欄位也常是空的；問「影響 nginx」靠 CPE 比對，這類 CVE 就查不到。
+
 - `NVD_API_KEY` 選用，放 `.env`；有的話 NVD 的速率限制從每 30 秒 5 次放寬到 50 次，抓資料快很多
 - 讀 [`scripts/load_data.py`](../scripts/load_data.py)，再用 `uv run scripts/load_data.py` 把 NVD 最近 90 天、CISA KEV、EPSS 抓進 DuckDB。資料庫不用另外建：第一次執行時 `duckdb.connect("data/vuln.duckdb")` 會自動建檔，三張表由腳本裡的 `CREATE OR REPLACE TABLE` 建立
   - `cvss()`：同一個 CVE 可能同時有 NVD 評的 `Primary` 和廠商評的 `Secondary` 分數，也可能只有廠商評的，所以優先取 `Primary`，沒有就取第一個
   - `cwes()`：略過 `NVD-CWE-Other`、`NVD-CWE-noinfo` 這兩個佔位值
   - `cpes()`：只取 `vulnerable` 為 true 的 CPE，false 的是漏洞產品執行的平台
-  - `nvd_get()`：被限速時等 30 秒再試；官方文件沒寫限速時回哪個狀態碼，所以 403、429、503 都重試
   - `load_epss()`：EPSS 有幾十萬筆，直接讓 DuckDB 用 `read_csv` 讀下載的 gzip 檔，比逐筆 `INSERT` 快
+- 讀 [`src/vuln_agent/nvd.py`](../src/vuln_agent/nvd.py)：`load_data.py` 和 notebook 3.2 查證 CVE 都用這裡的 `nvd_get()`
+  - `nvd_get()`：被限速或逾時時等 30 秒再試；官方文件沒寫限速時回哪個狀態碼，所以 403、429、503 都重試
 
 ### 步驟 4：串起來：SQL 樣板、FastAPI 與串流
 

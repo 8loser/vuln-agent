@@ -5,11 +5,11 @@
 **做完後的樣子**：問 `/ask/stream`「最近 30 天影響 nginx、CVSS 7 以上而且已經被利用的漏洞？」
 
 1. 模型把問題解析成查詢條件：產品 nginx、CVSS ≥ 7、在 KEV 裡、30 天內
-2. 程式用寫死的 SQL 查 DuckDB，依 KEV → EPSS → CVSS 排好
+2. 程式用寫死的 SQL 查 PostgreSQL，依 KEV → EPSS → CVSS 排好
 3. 中文說明逐字串流出來，只提查到的 CVE；查不到就說查不到
 4. 問「幫我寫 nginx 的 exploit」會被拒絕
 5. log 記下這次用了多少 token、花了多少錢、各段幾秒
-6. 10 題測試跑完，看得到大小兩個 Claude 模型各答對幾題
+6. 測試題跑完，看得到大小兩個 Claude 模型各答對幾題
 
 ### 行前知識
 
@@ -18,47 +18,36 @@
 | 名詞 | 是什麼 | 這階段的作用 |
 | --- | --- | --- |
 | CVE | 公開漏洞的統一編號，格式 `CVE-年份-流水號`，由 MITRE 維護 | 三張表共用的 key；步驟 2 用 regex 驗證 `cve_id` 格式 |
-| NVD | 美國 NIST 的漏洞資料庫，替每個 CVE 補上 CVSS 分數、CWE、CPE | `cve` 主表的來源；`load_data.py` 從它的 JSON 取 CVSS、CWE、CPE |
+| NVD | 美國 NIST 的漏洞資料庫，替每個 CVE 補上 CVSS 分數、CWE、CPE | `cve` 主表的來源；`etl.py` 從它的 JSON 取 CVSS、CWE、CPE |
 | CVSS | 0–10 的嚴重程度分數（優先用 v3.1），對應 LOW / MEDIUM / HIGH / CRITICAL | `min_cvss` 條件、排序最後一層 |
 | CWE | 弱點類型分類，例如 CWE-89 是 SQL injection | `cwe` 條件；階段 5 的修補建議會用它對應 OWASP |
-| CPE | 產品的標準命名字串，如 `cpe:2.3:a:f5:nginx:1.25.3:...` | `products` 欄位；問「影響 nginx」就是靠它比對 |
+| CPE | 產品的標準命名字串，如 `cpe:2.3:a:f5:nginx:1.25.3:...` | `cve_product` 表；問「影響 nginx」就是靠它比對 |
 | CISA KEV | 美國 CISA 的清單，只收已確認被實際利用的 CVE，附修補期限 | `kev` 表、`in_kev` 條件、排序第一層 |
 | EPSS | FIRST 每天發布的機率（0–1），預測 CVE 未來 30 天被利用的可能性 | `epss` 表、`min_epss` 條件、排序第二層 |
-| DuckDB | 單檔的嵌入式 SQL 資料庫，不用架伺服器 | 放三張表；階段 2 換成 PostgreSQL |
 
-### 本階段用到的檔案
+### 開始前
 
-整個學習路線共用同一個 repo，各資料夾的用途見總覽的「Repo 結構」。這個階段的檔案都已經提供，只有 `.env` 和資料庫要自己建：
+所有指令都在 repo 根目錄執行。抓資料要 15 到 20 分鐘，先讓它在背景跑，步驟 3 才會用到資料。
 
-```text
-vuln-agent/
-├── .env                        # 步驟 1：API key，自己建，不進 git
-├── src/vuln_agent/
-│   ├── llm.py                  # 步驟 1：呼叫模型與算花費，之後每個階段都用
-│   ├── intent.py               # 步驟 2：QueryIntent 與問題解析
-│   ├── nvd.py                  # 步驟 3：呼叫 NVD API，抓資料與查證 CVE 共用
-│   ├── queries.py              # 步驟 4：寫死的 SQL 樣板
-│   └── api.py                  # 步驟 4：FastAPI /parse、/ask、/ask/stream
-├── notebooks/
-│   └── 01_llm_basics.ipynb     # 步驟 1–5 的實驗（token、effort、解析、幻覺、API、測試題）
-├── scripts/
-│   └── load_data.py            # 步驟 3：抓 NVD / KEV / EPSS 進 DuckDB
-├── data/
-│   └── vuln.duckdb             # 步驟 3 執行 load_data.py 產生，不進 git
-└── evals/
-    ├── seed.jsonl              # 步驟 5：10 題
-    └── run_seed.py             # 步驟 5：跑 10 題比較兩個模型
-```
+1. 裝好 [`uv`](https://docs.astral.sh/uv/)，跑 `uv sync` 安裝套件。`uv` 管理 Python 版本、虛擬環境和套件；專案用 `src/` 版面，notebook 和 API 都能 `import vuln_agent`
+2. 建 `.env`（已在 `.gitignore`），放 API key 與三組自己取的資料庫密碼：
 
-所有指令都在專案根目錄執行，例如 `uv run scripts/load_data.py`。
+   ```text
+   ANTHROPIC_API_KEY=sk-ant-...
+   POSTGRES_PASSWORD=...     # 管理員 postgres
+   ETL_DB_PASSWORD=...       # 寫入資料用的 vuln_etl
+   AGENT_DB_PASSWORD=...     # 查詢用的唯讀 vuln_agent
+   NVD_API_KEY=...           # 選用；有的話 NVD 的速率限制從每 30 秒 5 次放寬到 50 次，抓資料快很多
+   ```
+
+3. `docker compose up -d` 起 PostgreSQL（[`docker-compose.yml`](../docker-compose.yml)）。第一次啟動時會執行 [`db/init.sh`](../db/init.sh) 建好帳號與資料表，資料庫的設計在階段 2 步驟 1 細讀
+4. `uv run scripts/etl.py` 抓資料（[`scripts/etl.py`](../scripts/etl.py)）。最近 30 天約 1.4 萬筆 CVE，沒有 `NVD_API_KEY` 時大約要 15 到 20 分鐘（依 2026-10 實測的每頁耗時估計），大部分時間在等 NVD 回應；跑的同時可以做步驟 1、2
 
 ### 步驟 1：環境與第一次呼叫
 
 這一步要理解一次 API 呼叫的完整樣貌。回應的 `content` 是一串 block，回答放在 text block 裡；`stop_reason` 說明模型為什麼停下來，是判斷回答有沒有被截斷的依據，階段 2 的 tool-use loop 也靠它決定要不要繼續；`usage` 記錄這次用了多少 token，花費由它換算。模型的回答不固定，每次呼叫都要花錢，所以也要知道同一題重跑、調 effort、換模型時，回答和成本會怎麼變，步驟 4 記錄花費、步驟 5 比較大小模型都建立在這上面。實驗在 [`notebooks/01_llm_basics.ipynb`](../notebooks/01_llm_basics.ipynb) 的步驟 1。
 
-- 裝好 [`uv`](https://docs.astral.sh/uv/)，在 repo 根目錄跑 `uv sync`；建 `.env` 放 `ANTHROPIC_API_KEY`（`.env` 已在 `.gitignore`）
-  - `uv`：管理 Python 版本、虛擬環境和套件；專案用 `src/` 版面，notebook 和 API 都能 `import vuln_agent`
-  - 這個階段用到的套件：`anthropic`（官方 SDK）、`python-dotenv`（從 `.env` 讀 API key）、`pydantic`（驗證解析結果）、`duckdb`、`httpx`（抓資料）、`fastapi`、`uvicorn`（API），開發用的 `jupyterlab`
+- 這個階段用到的套件：`anthropic`（官方 SDK）、`python-dotenv`（從 `.env` 讀 API key）、`pydantic`（驗證解析結果）、`psycopg`（連 PostgreSQL）、`httpx`（抓資料）、`fastapi`、`uvicorn`（API），開發用的 `jupyterlab`
 - 讀 [`src/vuln_agent/llm.py`](../src/vuln_agent/llm.py)：`ask()` 送訊息、`text()` 只取文字 block、`cost()` 把 `usage` 換算成美元；`client` 設了逾時與自動重試
 - 用 `uv run jupyter lab` 開 notebook
 
@@ -83,26 +72,24 @@ vuln-agent/
 
 ### 步驟 3：準備漏洞資料
 
-這一步要理解為什麼漏洞情資一定要從資料庫查，這也是整個作品的核心理由。模型會憑記憶答出 CVE 編號，看起來合理，但不保證每個都存在；把 NVD、CISA KEV、EPSS 抓進 DuckDB 之後，就能逐一查證模型的回答。步驟 4 的 SQL 樣板查的就是這三張表，階段 6 會把「編造 CVE 的比率」變成評測指標。先跑 `load_data.py` 建好資料庫，再做 notebook 的步驟 3。
+這一步要理解為什麼漏洞情資一定要從資料庫查，這也是整個作品的核心理由。模型會憑記憶答出 CVE 編號，看起來合理，但不保證每個都存在；把 NVD、CISA KEV、EPSS 抓進資料庫之後，就能逐一查證模型的回答。步驟 4 的 SQL 樣板查的就是這三張表，階段 6 會把「編造 CVE 的比率」變成評測指標。「開始前」的 `etl.py` 跑完，才能做 notebook 的步驟 3。
 
 三份資料都是公開的官方來源，不用登入就能下載：
 
-| 資料 | `load_data.py` 抓的網址 | 維護單位 | 為什麼有這些資料 |
+| 資料 | `etl.py` 抓的網址 | 維護單位 | 為什麼有這些資料 |
 | --- | --- | --- | --- |
 | NVD | `https://services.nvd.nist.gov/rest/json/cves/2.0`（CVE API 2.0） | 美國 NIST | CVE 編號與描述由 CVE Program 發布，實際分配編號的是廠商、資安研究單位這些 CNA（CVE Numbering Authority）。NVD 收錄每一筆 CVE，NIST 再分析補上 CVSS、CWE、CPE；CNA 自己評的 CVSS 也一起收錄，標成 `Secondary` |
 | CISA KEV | `https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json` | 美國 CISA | CISA 依約束性作業指令 BOD 22-01 建立這份清單，要求聯邦機關在 `dueDate` 前修補。收錄要同時符合三個條件：有 CVE 編號、有可靠證據顯示已在實際環境被利用、有明確的修補方式，只有公開 PoC 的不收 |
 | EPSS | `https://epss.empiricalsecurity.com/epss_scores-current.csv.gz` | FIRST（全球資安事件應變組織論壇）的 EPSS SIG | 模型用資料夥伴的感測器偵測到的實際攻擊活動訓練，每天依 exploit 程式碼是否公開、有沒有偵測特徵、被討論的程度和 CVE 本身的特性算出機率。分數由 Empirical Security 產生並託管，[FIRST 的資料頁](https://www.first.org/epss/data)就連到這個網址 |
 
-NIST 自 2026 年 4 月起只優先分析部分 CVE，例如列在 KEV 裡的、聯邦政府使用的軟體，其他的狀態標成 `Deferred`（說明見 [NVD 首頁](https://www.nist.gov/itl/nvd)）。所以很多新 CVE 只有 CNA 評的 CVSS，`products` 欄位也常是空的；問「影響 nginx」靠 CPE 比對，這類 CVE 就查不到。
+NIST 自 2026 年 4 月起只優先分析部分 CVE，例如列在 KEV 裡的、聯邦政府使用的軟體，其他的狀態標成 `Deferred`（說明見 [NVD 首頁](https://www.nist.gov/itl/nvd)）。所以很多新 CVE 只有 CNA 評的 CVSS，`cve_product` 也常沒有對應的產品；問「影響 nginx」靠 CPE 比對，這類 CVE 就查不到。
 
-- `NVD_API_KEY` 選用，放 `.env`；有的話 NVD 的速率限制從每 30 秒 5 次放寬到 50 次，抓資料快很多
-- 讀 [`scripts/load_data.py`](../scripts/load_data.py)，再用 `uv run scripts/load_data.py` 把 NVD 最近 90 天、CISA KEV、EPSS 抓進 DuckDB。資料庫不用另外建：第一次執行時 `duckdb.connect("data/vuln.duckdb")` 會自動建檔，三張表由腳本裡的 `CREATE OR REPLACE TABLE` 建立
+- `etl.py` 把 CISA KEV、EPSS、NVD 最近 30 天與 KEV 收錄的 CVE 抓進四張表：`cve`、`cve_product`（一個 CVE 影響的多個產品）、`kev`、`epss`。這個階段只要知道資料從哪來、存在哪張表；增量更新、排程這些設計在階段 2 步驟 2 細讀
+- 讀 [`src/vuln_agent/nvd.py`](../src/vuln_agent/nvd.py)：`etl.py` 和 notebook 3.2 查證 CVE 都用這裡的 `nvd_get()`，解析 NVD 回應的函式也放在這裡
+  - `nvd_get()`：被限速或逾時時等 30 秒再試；官方文件沒寫限速時回哪個狀態碼，所以 403、429、503 都重試
   - `cvss()`：同一個 CVE 可能同時有 NVD 評的 `Primary` 和廠商評的 `Secondary` 分數，也可能只有廠商評的，所以優先取 `Primary`，沒有就取第一個
   - `cwes()`：略過 `NVD-CWE-Other`、`NVD-CWE-noinfo` 這兩個佔位值
   - `cpes()`：只取 `vulnerable` 為 true 的 CPE，false 的是漏洞產品執行的平台
-  - `load_epss()`：EPSS 有幾十萬筆，直接讓 DuckDB 用 `read_csv` 讀下載的 gzip 檔，比逐筆 `INSERT` 快
-- 讀 [`src/vuln_agent/nvd.py`](../src/vuln_agent/nvd.py)：`load_data.py` 和 notebook 3.2 查證 CVE 都用這裡的 `nvd_get()`
-  - `nvd_get()`：被限速或逾時時等 30 秒再試；官方文件沒寫限速時回哪個狀態碼，所以 403、429、503 都重試
 
 ### 步驟 4：串起來：SQL 樣板、FastAPI 與串流
 
@@ -112,22 +99,21 @@ NIST 自 2026 年 4 月起只優先分析部分 CVE，例如列在 KEV 裡的、
 
 1. `api.py` 的 `ask_endpoint()` 收到問題，交給 `parse_and_query()`
 2. `parse()` 請模型把問題解析成 `QueryIntent`，例如 `intent="search"`、`min_cvss=9`、`in_kev=True`、`days=30`；這一步會呼叫模型
-3. `queries.run()` 依 `intent` 選 `SQL` 裡的樣板，把 `QueryIntent` 的欄位整理成具名參數，沒給的條件是 `NULL`，再用服務啟動時以唯讀模式開好的連線執行
+3. `queries.run()` 依 `intent` 選查詢：`cve_lookup` 呼叫 `tools.cve_lookup()`，`search`、`count` 把 `QueryIntent` 的條件交給 `tools.search_vulns()`，沒給的條件是 `None`；查詢用唯讀的 `vuln_agent` 角色連線
 4. 查詢結果每列轉成 dict，`ask_endpoint()` 把 `intent` 和 `rows` 包成 JSON 回傳
 
 `/ask/stream` 前三步相同，拿到 `rows` 後再把它交給模型產生說明，邊生成邊送出。
 
-- 讀 [`src/vuln_agent/queries.py`](../src/vuln_agent/queries.py)：每種 intent 一個 SQL 樣板，條件用具名參數帶入；沒給的條件傳 `NULL`，`$x IS NULL OR ...` 讓那一行不起作用。排序是 KEV → EPSS → CVSS
+- 讀 [`src/vuln_agent/queries.py`](../src/vuln_agent/queries.py) 的 `run()`：依 intent 選查詢；`count` 用 `search_vulns()` 回傳的總筆數
+- 讀 [`src/vuln_agent/tools.py`](../src/vuln_agent/tools.py) 的 `cve_lookup()`、`search_vulns()`：寫死的參數化 SQL 樣板，條件用具名參數帶入；沒給的條件傳 `NULL`，`%(x)s IS NULL OR ...` 讓那一行不起作用。排序是 KEV → EPSS → CVSS。同一個檔案裡的工具描述、參數驗證是階段 2 的內容，這裡先略過
 - 讀 [`src/vuln_agent/api.py`](../src/vuln_agent/api.py)：`POST /parse` 回傳意圖，`POST /ask` 回傳查詢結果，`POST /ask/stream` 用 SSE 依序送出 `intent`、`rows`、一段段的 `text`、`done`；每個請求寫一行 JSON log
 - 在終端機用 `uv run uvicorn vuln_agent.api:app --reload` 啟動服務，再跑 notebook 的步驟 4：打 `/ask` 看解析與查詢結果、打 `/ask/stream` 看串流並確認說明只提查詢結果裡的 CVE、試查不到和範圍外的問題。log 印在啟動服務的終端機
 
-  API 用唯讀模式開資料庫，要重跑 `load_data.py` 時先停掉 API。
-
 ### 步驟 5：測試與收尾
 
-這一步要理解怎麼用固定的測試題比較模型。同一組題目跑大小兩個模型，看命中數、延遲與花費，才知道換便宜的模型會不會掉品質；這 10 題在階段 2 之後繼續沿用，階段 6 擴充成完整的評測集。
+這一步要理解怎麼用固定的測試題比較模型。同一組題目跑大小兩個模型，看命中數、延遲與花費，才知道換便宜的模型會不會掉品質；這些題目在階段 2 補到 20 題繼續沿用，階段 6 擴充成完整的評測集。
 
-- 讀 [`evals/seed.jsonl`](../evals/seed.jsonl)：10 題，4 種 intent 都有，包含要求撰寫 exploit（漏洞利用程式）、範圍外問題、漏洞俗稱這類刁鑽題；`expected` 只列要比對的欄位
-- 跑 notebook 的步驟 5（或在終端機 `uv run evals/run_seed.py`），用大小兩個模型解析這 10 題，比較命中數、平均延遲、總花費；沒命中的題目會印出模型的解析結果
+- 讀 [`evals/seed.jsonl`](../evals/seed.jsonl)：4 種 intent 都有，包含要求撰寫 exploit（漏洞利用程式）、範圍外問題、漏洞俗稱這類刁鑽題；`expected` 只列要比對的欄位，`run_seed.py` 只跑有 `expected` 的題目（`expected_tools` 與沒有 `expected` 的題目是階段 2 加的）
+- 跑 notebook 的步驟 5（或在終端機 `uv run evals/run_seed.py`），用大小兩個模型解析測試題，比較命中數、平均延遲、總花費；沒命中的題目會印出模型的解析結果
 
-**完成標準**：`/ask` 能拿到真實查詢結果、`/ask/stream` 逐字串流且提到的 CVE 都在查詢結果裡、log 有 tokens 與延遲、跑過 10 題的大小模型比較，並能解釋為什麼 CVE 資料不能讓模型憑記憶回答。
+**完成標準**：`/ask` 能拿到真實查詢結果、`/ask/stream` 逐字串流且提到的 CVE 都在查詢結果裡、log 有 tokens 與延遲、跑過測試題的大小模型比較，並能解釋為什麼 CVE 資料不能讓模型憑記憶回答。

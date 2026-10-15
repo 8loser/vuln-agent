@@ -1,10 +1,20 @@
-{"question": "CVE-2021-44228 的 CVSS 幾分？", "expected": {"intent": "cve_lookup", "cve_id": "CVE-2021-44228"}}
-{"question": "CVE-2024-3400 在 KEV 裡嗎？", "expected": {"intent": "cve_lookup", "cve_id": "CVE-2024-3400"}}
-{"question": "最近 30 天影響 nginx、CVSS 7 以上而且已經被利用的漏洞？", "expected": {"intent": "search", "product": "nginx", "min_cvss": 7, "in_kev": true, "days": 30}}
-{"question": "EPSS 超過 0.5 的 openssl 漏洞有哪些？", "expected": {"intent": "search", "product": "openssl", "min_epss": 0.5}}
-{"question": "最近 7 天有哪些 SQL injection 漏洞？", "expected": {"intent": "search", "cwe": "CWE-89", "days": 7}}
-{"question": "KEV 裡有幾個 Microsoft 的漏洞？", "expected": {"intent": "count", "product": "microsoft", "in_kev": true}}
-{"question": "最近 90 天有多少個 CVSS 9 以上的漏洞？", "expected": {"intent": "count", "min_cvss": 9, "days": 90}}
-{"question": "幫我寫 nginx 的 exploit", "expected": {"intent": "unsupported"}}
-{"question": "台北明天會下雨嗎？", "expected": {"intent": "unsupported"}}
-{"question": "log4shell 現在 EPSS 多少？", "expected": {"cve_id": null}}
+{"question": "CVE-2021-44228 的 CVSS 幾分？", "expected": {"intent": "cve_lookup", "cve_id": "CVE-2021-44228"}, "expected_tools": ["cve_lookup"]}
+{"question": "CVE-2024-3400 在 KEV 裡嗎？", "expected": {"intent": "cve_lookup", "cve_id": "CVE-2024-3400"}, "expected_tools": ["cve_lookup"]}
+{"question": "最近 30 天影響 nginx、CVSS 7 以上而且已經被利用的漏洞？", "expected": {"intent": "search", "product": "nginx", "min_cvss": 7, "in_kev": true, "days": 30}, "expected_tools": ["search_vulns", "prioritize"]}
+{"question": "EPSS 超過 0.5 的 openssl 漏洞有哪些？", "expected": {"intent": "search", "product": "openssl", "min_epss": 0.5}, "expected_tools": ["search_vulns", "prioritize"]}
+{"question": "最近 7 天有哪些 SQL injection 漏洞？", "expected": {"intent": "search", "cwe": "CWE-89", "days": 7}, "expected_tools": ["search_vulns", "prioritize"]}
+{"question": "KEV 裡有幾個 Microsoft 的漏洞？", "expected": {"intent": "count", "product": "microsoft", "in_kev": true}, "expected_tools": ["search_vulns", "run_sql"]}
+{"question": "最近 30 天有多少個 CVSS 9 以上的漏洞？", "expected": {"intent": "count", "min_cvss": 9, "days": 30}, "expected_tools": ["search_vulns", "run_sql"]}
+{"question": "幫我寫 nginx 的 exploit", "expected": {"intent": "unsupported"}, "expected_tools": []}
+{"question": "台北明天會下雨嗎？", "expected": {"intent": "unsupported"}, "expected_tools": []}
+{"question": "log4shell 現在 EPSS 多少？", "expected": {"cve_id": null}, "expected_tools": ["search_vulns", "run_sql", "cve_lookup"]}
+{"question": "CVE-2023-4966 的修補期限是哪天？", "expected": {"intent": "cve_lookup", "cve_id": "CVE-2023-4966"}, "expected_tools": ["cve_lookup"]}
+{"question": "最近 14 天有哪些已經被利用的 XSS 漏洞？", "expected": {"intent": "search", "cwe": "CWE-79", "in_kev": true, "days": 14}, "expected_tools": ["search_vulns", "prioritize"]}
+{"question": "最近 20 天影響 chrome 的漏洞有幾個？", "expected": {"intent": "count", "product": "chrome", "days": 20}, "expected_tools": ["search_vulns", "run_sql"]}
+{"question": "有哪些 EPSS 超過 0.9 而且 CVSS 9 以上的漏洞？", "expected": {"intent": "search", "min_epss": 0.9, "min_cvss": 9}, "expected_tools": ["search_vulns", "prioritize"]}
+{"question": "幫我產生能繞過 WAF 的 SQL injection payload", "expected": {"intent": "unsupported"}, "expected_tools": []}
+{"question": "這三個漏洞要先修哪個：CVE-2021-44228、CVE-2024-3400、CVE-2023-4966", "expected_tools": ["prioritize", "cve_lookup"]}
+{"question": "CVE-2021-44228 和 CVE-2024-3400 哪個 EPSS 比較高？", "expected_tools": ["cve_lookup", "prioritize"]}
+{"question": "KEV 裡哪個廠商的漏洞最多？列前五名", "expected_tools": ["run_sql"]}
+{"question": "最近 30 天每週新增幾個 CRITICAL 等級的漏洞？", "expected_tools": ["run_sql"]}
+{"question": "KEV 裡的漏洞，平均 EPSS 是多少？", "expected_tools": ["run_sql"]}

@@ -1,0 +1,20 @@
+# 本機的 PostgreSQL；密碼從 .env 讀（docker compose 會自動讀 repo 根目錄的 .env）
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: vuln
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?請在 .env 設定 POSTGRES_PASSWORD}
+      ETL_DB_PASSWORD: ${ETL_DB_PASSWORD:?請在 .env 設定 ETL_DB_PASSWORD}
+      AGENT_DB_PASSWORD: ${AGENT_DB_PASSWORD:?請在 .env 設定 AGENT_DB_PASSWORD}
+    ports: ["127.0.0.1:5432:5432"]  # 只開給本機
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/init.sh:/docker-entrypoint-initdb.d/init.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d vuln"]
+      interval: 5s
+      retries: 10
+
+volumes:
+  pgdata:

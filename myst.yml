@@ -21,6 +21,7 @@ project:
         - file: docs/07-stage-llm-security.md
         - file: docs/08-stage-finetune.md
         - file: docs/09-stage-deploy.md
+    - file: docs/glossary.md
     - title: 實驗 notebook
       children:
         - file: notebooks/01_llm_basics.ipynb

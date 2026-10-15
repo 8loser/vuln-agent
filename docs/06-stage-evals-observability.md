@@ -78,7 +78,7 @@ def make_case(tpl, params, conn):
 ### 步驟 5：放進 GitHub Actions 當回歸測試
 
 - 把評測分成兩組：`smoke`（約 30 題，只放確定性檢查，例如 SQL 執行結果、工具選擇、CVE 幻覺、排序規則，每個 PR 跑並當門檻）和 `full`（全部題目加 LLM judge，每晚或手動觸發，只出報告不擋 PR），控制 CI 花費
-- Workflow：建好快照資料庫（PostgreSQL service container 或直接用 DuckDB 讀快照）→ 跑評測 → 輸出 Markdown 摘要表；API key 放 GitHub Actions secrets，不寫進 repo，也不要在 log 印出
+- Workflow：建好快照資料庫（PostgreSQL service container 載入快照）→ 跑評測 → 輸出 Markdown 摘要表；API key 放 GitHub Actions secrets，不寫進 repo，也不要在 log 印出
 - 設門檻：SQL 正確率、幻覺率、排序品質低於規格品質目標就讓 job 失敗；初期可以先設成比 baseline 低 5% 才失敗，避免一直紅燈
 - 把摘要表貼到 PR 留言或 job summary，並保留結果 jsonl 當 artifact，方便跟上一次比較
 - 故意改壞一個工具描述或 prompt，確認 CI 真的會擋下來

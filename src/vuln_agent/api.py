@@ -11,7 +11,6 @@ from vuln_agent import queries
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("vuln_agent")
 app = FastAPI()
-db = queries.connect()
 
 ANSWER_SYSTEM = """你是漏洞情資助理，用繁體中文回答。
 - 只能根據使用者訊息裡的「查詢結果」回答，只能提到查詢結果裡出現的 CVE 編號
@@ -36,7 +35,7 @@ def parse_and_query(q: Question, timings: dict, usages: list):
     intent = parse(q.question, usages=usages)
     timings["parse"] = time.time() - t
     t = time.time()
-    rows = queries.run(db.cursor(), intent)  # 每個請求用自己的 cursor，避免多執行緒共用同一個連線
+    rows = queries.run(intent)
     timings["sql"] = time.time() - t
     return intent, rows
 

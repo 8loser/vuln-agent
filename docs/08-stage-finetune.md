@@ -24,7 +24,7 @@
 
 ```json
 {"messages": [
-  {"role": "system", "content": "你把漏洞問題轉成 DuckDB/PostgreSQL 唯讀 SQL。只輸出 SQL。\n資料表：cve(cve_id, published, description, cvss_score, severity, cwe, products)、kev(cve_id, vendor, product, date_added, due_date)、epss(cve_id, epss, percentile)"},
+  {"role": "system", "content": "你把漏洞問題轉成 PostgreSQL 唯讀 SQL。只輸出 SQL。\n資料表：cve(cve_id, published, description, cvss_score, severity, cwe, products)、kev(cve_id, vendor, product, date_added, due_date)、epss(cve_id, epss, percentile)"},
   {"role": "user", "content": "最近 30 天影響 nginx、CVSS 7 以上而且在 KEV 裡的漏洞，依 EPSS 由高到低"},
   {"role": "assistant", "content": "SELECT c.cve_id, c.cvss_score, e.epss FROM cve c JOIN kev k ON k.cve_id = c.cve_id LEFT JOIN epss e ON e.cve_id = c.cve_id WHERE c.products ILIKE '%nginx%' AND c.cvss_score >= 7 AND c.published >= now() - INTERVAL 30 DAY ORDER BY e.epss DESC NULLS LAST"}
 ]}

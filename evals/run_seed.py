@@ -6,7 +6,9 @@ from vuln_agent.intent import parse
 from vuln_agent.llm import cost
 
 MODELS = ("claude-sonnet-5-5", "claude-haiku-5-5")
-CASES = [json.loads(line) for line in (Path(__file__).parent / "seed.jsonl").read_text().splitlines()]
+# 沒有 expected 的題目（排序、統計）不在 QueryIntent 的範圍，只用在階段 2 的 agent 評測
+CASES = [c for line in (Path(__file__).parent / "seed.jsonl").read_text().splitlines()
+         if "expected" in (c := json.loads(line))]
 
 def hit(intent, expected: dict) -> bool:
     """只比對 expected 有列出的欄位；product 不分大小寫。"""

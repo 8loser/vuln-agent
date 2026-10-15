@@ -21,7 +21,7 @@
 
 ### 步驟 2：SQL 強制唯讀
 
-- 資料庫層：PostgreSQL 建一個只有 `SELECT` 權限的專用帳號給 `run_sql` 用，並設定唯讀交易與 `statement_timeout`；如果還在用 DuckDB，改用唯讀模式開連線（設定方式以官方文件為準）
+- 資料庫層：PostgreSQL 建一個只有 `SELECT` 權限的專用帳號給 `run_sql` 用，並設定唯讀交易與 `statement_timeout`
 - 解析層：用 SQL 解析套件（例如 sqlglot，函式用法以官方文件為準）檢查「只有一個敘述、而且是 SELECT」，拒絕 `INSERT`、`UPDATE`、`DELETE`、`DROP`、`COPY`、`ATTACH`、多敘述與註解夾帶
 - 限制可查的表與欄位（白名單），結果自動加筆數上限
 - 寫 10 個以上的惡意 SQL 測試案例（例如 `SELECT 1; DROP TABLE cve`、讀系統表、超長查詢），先只開解析層、再只開權限層，各跑一次，確認任一層單獨都擋得住

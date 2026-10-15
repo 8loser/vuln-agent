@@ -30,16 +30,18 @@
 
 ### Repo 結構
 
-這個 repo 包含整個作品的程式；各階段文件的「本階段用到的檔案」列出該階段用到的檔案。
+這個 repo 包含整個作品的程式；各階段文件的「開始前」列出要先執行的指令，每個步驟寫明要讀哪些檔案。
 
 | 資料夾 | 放什麼 |
 | --- | --- |
 | `docs/` | 各階段的教學文件 |
 | `notebooks/` | 各階段的實驗 notebook，用階段編號命名，如 `01_llm_basics.ipynb` |
 | `src/vuln_agent/` | 作品本身的程式：呼叫模型、解析、工具、API |
-| `scripts/` | 手動執行的工具，如抓資料的 `load_data.py` |
+| `scripts/` | 手動或排程執行的工具，如抓資料的 `load_data.py`、`etl.py` |
+| `db/` | PostgreSQL 的初始化腳本，從階段 2 開始使用 |
 | `evals/` | 測試題與評測腳本，從階段 1 步驟 5 開始使用 |
-| `data/` | 下載的資料與本機資料庫，不進 git |
+| `tests/` | 不呼叫 LLM 的 pytest，從階段 2 開始使用 |
+| `data/` | 掃描報告、知識來源、log 等本機檔案，不進 git；資料庫放在 Docker volume |
 
 所有指令都在 repo 根目錄執行。
 
@@ -55,6 +57,8 @@
 - **Web 資安基礎**：知道 OWASP Top 10、用過弱掃工具更好；階段 7 直接從 LLM 特有的風險開始
 - **前端**：會一個前端框架（教程用 Vue 3，換 React 也行）
 - **AI coding 工具**：用過 Claude Code 或類似工具更好，階段 3、4 會拿它的 hooks、permissions、MCP 對照自己寫的版本
+
+**資安名詞**：CVE、CVSS、KEV、EPSS 這些漏洞情資的名詞不用先會，教材裡遇到時查[專有名詞](glossary.md)。
 
 **不需要先會**：深度學習數學、從零訓練模型、LangChain。階段 1 刻意不經框架、直接呼叫官方 SDK；階段 5 假設你頂多做過「向量 top-k」的入門 RAG，直接從 chunking 比較開始。
 

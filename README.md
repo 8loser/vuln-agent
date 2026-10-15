@@ -17,18 +17,9 @@
 
 ## 怎麼開始
 
-```bash
-# 1. fork 或 clone 這個 repo，裝好 uv：https://docs.astral.sh/uv/
-uv sync
+fork 或 clone 這個 repo 之後，照[階段 1 的「開始前」](docs/01-stage-llm-basics.md#開始前)裝套件、建 `.env`、起 PostgreSQL、抓資料。
 
-# 2. 建 .env 放 API key（.env 已在 .gitignore）
-echo "ANTHROPIC_API_KEY=sk-ant-..." > .env
-
-# 3. 開 notebook，照 docs/01-stage-llm-basics.md 往下做
-uv run jupyter lab
-```
-
-先讀 [`docs/00-overview.md`](docs/00-overview.md) 看全貌，再從[階段 1](docs/01-stage-llm-basics.md) 照步驟往下做。程式都已經寫好：每個階段先讀文件了解要理解什麼，再讀對應的程式、跑 notebook 的實驗。
+先讀 [`docs/00-overview.md`](docs/00-overview.md) 看全貌，再從[階段 1](docs/01-stage-llm-basics.md) 照步驟往下做。CVE、KEV、EPSS 這些資安名詞可以隨時查[專有名詞](docs/glossary.md)。程式都已經寫好：每個階段先讀文件了解要理解什麼，再讀對應的程式、跑 notebook 的實驗。
 
 想用網頁版閱讀，可以在本機預覽（用 [Jupyter Book](https://jupyterbook.org/) 建置，notebook 不會被執行）：
 
@@ -57,7 +48,10 @@ uvx jupyter-book@2.1.7 start
 | `docs/` | 總覽與各階段文件：目標、概念、步驟、完成標準 |
 | `notebooks/` | 有實驗性質的階段各一份 notebook，用實驗觀察程式與模型的行為 |
 | `src/vuln_agent/` | 作品本身的程式 |
-| `scripts/` | 手動執行的工具，如抓資料的 `load_data.py` |
+| `scripts/` | 手動或排程執行的工具，如抓資料的 `load_data.py`、`etl.py` |
+| `db/` | PostgreSQL 的初始化腳本 |
+| `evals/` | 測試題與評測腳本 |
+| `tests/` | 不呼叫 LLM 的 pytest |
 
 ## 規則
 

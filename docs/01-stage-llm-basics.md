@@ -40,7 +40,7 @@ vuln-agent/
 │   ├── queries.py              # 步驟 4：寫死的 SQL 樣板
 │   └── api.py                  # 步驟 4：FastAPI /parse、/ask、/ask/stream
 ├── notebooks/
-│   └── 01_llm_basics.ipynb     # 步驟 1–3 的實驗（token、effort、解析、幻覺）
+│   └── 01_llm_basics.ipynb     # 步驟 1–5 的實驗（token、effort、解析、幻覺、API、測試題）
 ├── scripts/
 │   └── load_data.py            # 步驟 3：抓 NVD / KEV / EPSS 進 DuckDB
 ├── data/
@@ -108,14 +108,18 @@ NIST 自 2026 年 4 月起只優先分析部分 CVE，例如列在 KEV 裡的、
 
 這一步要理解作品的基本架構：模型只負責把問題變成查詢條件，SQL 由程式用寫死的參數化樣板執行，模型不碰 SQL，也就不會查出樣板以外的東西；回答時只把查詢結果交給模型，要求它只能提結果裡的 CVE。回答要等模型生成，用 SSE 串流讓使用者邊生成邊看。每個請求都記下 tokens、花費與各段耗時，之後階段 6 的可觀測性就是從這裡擴充。
 
+一個 `/ask` 請求在服務裡走過的路徑（notebook 只負責送出 HTTP 請求，查資料庫發生在 uvicorn 那個程序裡）：
+
+1. `api.py` 的 `ask_endpoint()` 收到問題，交給 `parse_and_query()`
+2. `parse()` 請模型把問題解析成 `QueryIntent`，例如 `intent="search"`、`min_cvss=9`、`in_kev=True`、`days=30`；這一步會呼叫模型
+3. `queries.run()` 依 `intent` 選 `SQL` 裡的樣板，把 `QueryIntent` 的欄位整理成具名參數，沒給的條件是 `NULL`，再用服務啟動時以唯讀模式開好的連線執行
+4. 查詢結果每列轉成 dict，`ask_endpoint()` 把 `intent` 和 `rows` 包成 JSON 回傳
+
+`/ask/stream` 前三步相同，拿到 `rows` 後再把它交給模型產生說明，邊生成邊送出。
+
 - 讀 [`src/vuln_agent/queries.py`](../src/vuln_agent/queries.py)：每種 intent 一個 SQL 樣板，條件用具名參數帶入；沒給的條件傳 `NULL`，`$x IS NULL OR ...` 讓那一行不起作用。排序是 KEV → EPSS → CVSS
 - 讀 [`src/vuln_agent/api.py`](../src/vuln_agent/api.py)：`POST /parse` 回傳意圖，`POST /ask` 回傳查詢結果，`POST /ask/stream` 用 SSE 依序送出 `intent`、`rows`、一段段的 `text`、`done`；每個請求寫一行 JSON log
-- 用 `uv run uvicorn vuln_agent.api:app --reload` 啟動，另開終端機試：
-
-  ```bash
-  curl -N -X POST localhost:8000/ask/stream -H 'Content-Type: application/json' \
-    -d '{"question": "最近 30 天影響 nginx、CVSS 7 以上而且已經被利用的漏洞？"}'
-  ```
+- 在終端機用 `uv run uvicorn vuln_agent.api:app --reload` 啟動服務，再跑 notebook 的步驟 4：打 `/ask` 看解析與查詢結果、打 `/ask/stream` 看串流並確認說明只提查詢結果裡的 CVE、試查不到和範圍外的問題。log 印在啟動服務的終端機
 
   API 用唯讀模式開資料庫，要重跑 `load_data.py` 時先停掉 API。
 
@@ -123,8 +127,7 @@ NIST 自 2026 年 4 月起只優先分析部分 CVE，例如列在 KEV 裡的、
 
 這一步要理解怎麼用固定的測試題比較模型。同一組題目跑大小兩個模型，看命中數、延遲與花費，才知道換便宜的模型會不會掉品質；這 10 題在階段 2 之後繼續沿用，階段 6 擴充成完整的評測集。
 
-- 讀 [`evals/seed.jsonl`](../evals/seed.jsonl)：10 題，4 種 intent 都有，包含要求 exploit、範圍外問題、漏洞俗稱這類刁鑽題；`expected` 只列要比對的欄位
-- 用 `uv run evals/run_seed.py` 跑大小兩個模型，比較命中數、平均延遲、總花費；沒命中的題目會印出模型的解析結果
-- （選做）寫一篇文章：「不用 LangChain 直接呼叫 LLM：用 NVD / KEV / EPSS 練 structured output 與串流」
+- 讀 [`evals/seed.jsonl`](../evals/seed.jsonl)：10 題，4 種 intent 都有，包含要求撰寫 exploit（漏洞利用程式）、範圍外問題、漏洞俗稱這類刁鑽題；`expected` 只列要比對的欄位
+- 跑 notebook 的步驟 5（或在終端機 `uv run evals/run_seed.py`），用大小兩個模型解析這 10 題，比較命中數、平均延遲、總花費；沒命中的題目會印出模型的解析結果
 
 **完成標準**：`/ask` 能拿到真實查詢結果、`/ask/stream` 逐字串流且提到的 CVE 都在查詢結果裡、log 有 tokens 與延遲、跑過 10 題的大小模型比較，並能解釋為什麼 CVE 資料不能讓模型憑記憶回答。

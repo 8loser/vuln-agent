@@ -2,7 +2,7 @@
 
 > 實驗 notebook：[`notebooks/06_evals.ipynb`](../notebooks/06_evals.ipynb)，error analysis 工作台，以及題目產生器與評分函式的原型。
 
-這個階段是整條路線的重點，也是多數人轉 AI 應用工程師時最大的缺口：把「感覺變好了」換成「數字變好了」。前面五個階段做出了 agent、工具、報告匯入、PDF 擷取和 RAG，但只有階段 2 那二十幾題程式斷言。漏洞資料最大的好處是**標準答案能用程式從資料庫算出來**，所以這個階段以 `evals/seed.jsonl` 的 10 題當種子，自動產生 200 題以上「問題 → SQL → 標準答案」，量測 SQL 正確率、工具選擇、CVE 幻覺率、PDF 擷取、排序品質、修補建議與 RAG 檢索，放進 GitHub Actions 當回歸測試，再加上 tracing 看每個請求的成本與延遲。這裡建立的 baseline 會直接寫進作品的評測報告（F11），階段 8 微調時用同一套評測集比較。
+這個階段是整條路線的重點，也是多數人轉 AI 應用工程師時最大的缺口：把「感覺變好了」換成「數字變好了」。前面五個階段做出了 agent、工具、報告匯入、PDF 擷取和 RAG，但只有階段 2 那二十幾題程式斷言。漏洞資料最大的好處是**標準答案能用程式從資料庫算出來**，所以這個階段以 `evals/seed.jsonl` 的 20 題當種子，自動產生 200 題以上「問題 → SQL → 標準答案」，量測 SQL 正確率、工具選擇、CVE 幻覺率、PDF 擷取、排序品質、修補建議與 RAG 檢索，做成每次改動後都跑的回歸測試，再加上 tracing 看每個請求的成本與延遲。這裡建立的 baseline 會直接寫進作品的評測報告（F11），階段 8 微調時用同一套評測集比較。
 
 ### 要學的概念
 
@@ -11,7 +11,7 @@
 - **比結果、不比 SQL 字串**：同一個問題有很多種正確 SQL，要比「執行結果的集合」是否相同（execution accuracy），並決定排序與欄位要不要算進去。
 - **幻覺要能自動抓**：回答裡每個 CVE 編號和分數都必須出自本次查詢結果，這是資安工具能不能被信任的底線。
 - **LLM-as-judge 用二元判斷並校正**：評審模型對每個標準只回 pass / fail，不打 1 到 5 分；再用人工標註算它抓到真失敗的比例（TPR）和放行真正好答案的比例（TNR），才知道它能信幾成。
-- **CI 門檻只放確定性檢查**：程式算得出對錯的指標擋 PR；LLM judge 比較慢、比較貴、也會飄，改成每晚或手動跑。
+- **回歸測試只拿確定性檢查當門檻**：程式算得出對錯的指標，每次改 prompt、工具描述或模型後都跑，退步就不算完成；LLM judge 比較慢、比較貴、也會飄，只在換模型或大改時跑完整評測。
 - **評測要可重現**：資料每天更新，標準答案會跟著變；評測要對固定的資料快照跑，才分得出是模型退步還是資料變了。
 - **Tracing 是除錯工具，不只是儀表板**：每個請求拆成 LLM 呼叫、工具執行、SQL、檢索各段，才看得出延遲和花費卡在哪，也是 error analysis 的原料。
 
@@ -26,8 +26,8 @@
 
 ### 步驟 2：資料快照與評測集產生器
 
-- 從 PostgreSQL 匯出一份固定的資料快照（例如挑 2,000 筆 CVE 加上對應的 KEV、EPSS），存成 `evals/fixtures/`，評測一律對這份快照跑；快照產生腳本 commit，資料本身依大小決定放 repo 還是 CI 時產生
-- 把 `seed.jsonl` 的 10 題抽象成 8 到 12 種樣板（查單一 CVE、產品 + CVSS 門檻、KEV 篩選、EPSS 排序、時間區間、各 severity 計數、CWE 篩選、組合條件），每種樣板寫好參數化 SQL
+- 從 PostgreSQL 匯出一份固定的資料快照（例如挑 2,000 筆 CVE 加上對應的 KEV、EPSS），存成 `evals/fixtures/`，評測一律對這份快照跑；快照產生腳本 commit，資料本身依大小決定放 repo 還是用腳本在本機產生
+- 把 `seed.jsonl` 的 20 題抽象成 8 到 12 種樣板（查單一 CVE、產品 + CVSS 門檻、KEV 篩選、EPSS 排序、時間區間、各 severity 計數、CWE 篩選、組合條件），每種樣板寫好參數化 SQL
 - 寫 `evals/generate.py`：從快照抽參數（真實存在的產品、CVE、CWE），每種樣板產生 20 題以上，總數 200 題以上；每題存 `question`、`gold_sql`、`gold_result`、`expected_tool`、`template`、`difficulty`
 - 每種樣板準備 3 到 5 種中文問法（口語、俗稱、相對時間），避免模型只學會一種句型；另外加 20 題 `unsupported`（要求攻擊程式、範圍外）測拒答
 - 過濾掉答案為空或超過 100 筆的題目，或刻意保留少量「查無資料」題，測模型會不會硬掰
@@ -75,13 +75,12 @@ def make_case(tpl, params, conn):
 - 修補建議 LLM-as-judge：依步驟 1 找到的失敗類型寫評分標準（建議是否正確、有沒有引用、引用是否支持說法、有沒有給出攻擊步驟），每個標準由另一個模型回 pass / fail 並附理由
 - 自己人工標註 30 到 50 題 pass / fail，分成調整用和驗證用兩組；用驗證組算 judge 的 TPR 和 TNR，太低就改評分標準或換評審模型，記下調整過程
 
-### 步驟 5：放進 GitHub Actions 當回歸測試
+### 步驟 5：回歸測試：smoke 與 full
 
-- 把評測分成兩組：`smoke`（約 30 題，只放確定性檢查，例如 SQL 執行結果、工具選擇、CVE 幻覺、排序規則，每個 PR 跑並當門檻）和 `full`（全部題目加 LLM judge，每晚或手動觸發，只出報告不擋 PR），控制 CI 花費
-- Workflow：建好快照資料庫（PostgreSQL service container 載入快照）→ 跑評測 → 輸出 Markdown 摘要表；API key 放 GitHub Actions secrets，不寫進 repo，也不要在 log 印出
-- 設門檻：SQL 正確率、幻覺率、排序品質低於規格品質目標就讓 job 失敗；初期可以先設成比 baseline 低 5% 才失敗，避免一直紅燈
-- 把摘要表貼到 PR 留言或 job summary，並保留結果 jsonl 當 artifact，方便跟上一次比較
-- 故意改壞一個工具描述或 prompt，確認 CI 真的會擋下來
+- 把評測分成兩組，控制每次跑的時間與花費：`smoke`（約 30 題，只放確定性檢查，例如 SQL 執行結果、工具選擇、CVE 幻覺、排序規則，每次改 prompt、工具描述或模型後都跑）和 `full`（全部題目加 LLM judge，換模型或大改時跑，只出報告）
+- `evals/run.py` 加上 `--suite smoke` / `--suite full`，都對步驟 2 的資料快照跑，跑完輸出 Markdown 摘要表，結果 jsonl 存在 `evals/results/`，方便跟上一次比較
+- 設門檻：`smoke` 的 SQL 正確率、幻覺率、排序品質低於規格品質目標時，腳本以非 0 結束；初期可以先設成比 baseline 低 5% 才失敗，避免一直失敗
+- 故意改壞一個工具描述或 prompt，確認 `smoke` 真的會失敗
 
 ### 步驟 6：成本、延遲與快取
 
@@ -94,6 +93,6 @@ def make_case(tpl, params, conn):
 ### 步驟 7：收尾
 
 - README：評測集怎麼產生、怎麼跑 `smoke` / `full`、指標定義、baseline 結果表（各模型的 SQL 正確率、工具選擇正確率、幻覺率、PDF 擷取正確率、排序品質、RAG recall@k、judge 一致率、p50 延遲、每題成本），並附一張 trace 截圖
-- （選做）寫一篇文章：「標準答案能用程式算出來：替漏洞分析 Agent 自動產生 200 題 text-to-SQL 評測集，放進 GitHub Actions」
+- （選做）寫一篇文章：「標準答案能用程式算出來：替漏洞分析 Agent 自動產生 200 題 text-to-SQL 評測集」
 
-**完成標準**：`evals/` 裡有固定的資料快照與 200 題以上自動產生的題目（每題有 gold SQL 與 gold result）；跑一次指令就能得到 SQL 正確率、工具選擇正確率、幻覺率、PDF 擷取正確率、排序品質、RAG recall@5 / recall@10 與修補建議 judge 分數，以及 judge 對人工標註的 TPR / TNR；PR 會自動跑 smoke 評測並在退步時失敗；每個請求在 Langfuse 或 OTel 裡看得到分段延遲、tokens 與花費；有一份 error analysis 整理出的失敗類型表；README 有 baseline 表，並能說明哪些指標已達規格品質目標、哪些還沒有、下一步打算怎麼改。
+**完成標準**：`evals/` 裡有固定的資料快照與 200 題以上自動產生的題目（每題有 gold SQL 與 gold result）；跑一次指令就能得到 SQL 正確率、工具選擇正確率、幻覺率、PDF 擷取正確率、排序品質、RAG recall@5 / recall@10 與修補建議 judge 分數，以及 judge 對人工標註的 TPR / TNR；`smoke` 評測在退步時會以非 0 結束；每個請求在 Langfuse 或 OTel 裡看得到分段延遲、tokens 與花費；有一份 error analysis 整理出的失敗類型表；README 有 baseline 表，並能說明哪些指標已達規格品質目標、哪些還沒有、下一步打算怎麼改。

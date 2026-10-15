@@ -123,7 +123,7 @@
 
 ### 步驟 6：最小評測
 
-這一步要理解評測怎麼變成每次改動都會跑的回歸測試。先只用程式斷言，不用 LLM 當評審；完整的 error analysis、LLM-as-judge 和大型評測集留在階段 6。之後每加一個 harness 功能，都先跑這組測試看數字有沒有變。
+這一步要理解評測怎麼變成每次改動後都跑一次的回歸測試。先只用程式斷言，不用 LLM 當評審；完整的 error analysis、LLM-as-judge 和大型評測集留在階段 6。之後每加一個 harness 功能，都先跑這組測試看數字有沒有變。
 
 - 三組不呼叫 LLM 的測試，`uv run pytest` 一次跑完：
   - [`tests/test_tools.py`](../tests/test_tools.py)：四個工具
@@ -132,7 +132,6 @@
 - 兩組呼叫 LLM 的評測：
   - 結構化擷取：`uv run evals/run_seed.py`（階段 1 的腳本），`QueryIntent` 逐欄比對 `expected`
   - Agent 斷言：`uv run evals/run_agent.py`，就是步驟 5 用 C 跑的那組
-- 讀 [`.github/workflows/test.yml`](../.github/workflows/test.yml)：每次 push 起一個 PostgreSQL service container，跑 `db/init.sh`、載入 [`tests/fixtures.sql`](../tests/fixtures.sql) 的假資料再跑 pytest；在 GitHub 的 Actions 頁面手動觸發時，另外跑 agent 評測。手動觸發前先在 repo 的 Settings → Secrets 加上 `ANTHROPIC_API_KEY`
 - 之後每碰到一個答錯的問題，就加進 `seed.jsonl`
 
 ### 步驟 7：收尾

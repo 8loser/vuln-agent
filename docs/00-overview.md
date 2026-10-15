@@ -17,11 +17,11 @@
 | 階段 | 學的技能 | 替作品加上的那一塊 | 實驗 notebook |
 | --- | --- | --- | --- |
 | [1](01-stage-llm-basics.md) | LLM API 基本功、structured output、串流、成本 | 問題解析器：漏洞問題轉 JSON，寫死的 SQL 查小型漏洞資料庫；前 10 題測試題 | [01_llm_basics](../notebooks/01_llm_basics.ipynb) |
-| [2](02-stage-agent-data-pipeline.md) | Tool use、手寫 agent loop、工具設計、資料管線 | Agent 雛形：ETL 進 PostgreSQL；`cve_lookup`、`search_vulns`、`prioritize`、`run_sql`（唯讀）；第一版最小評測進 CI | |
+| [2](02-stage-agent-data-pipeline.md) | Tool use、手寫 agent loop、工具設計、資料管線 | Agent 雛形：ETL 進 PostgreSQL；`cve_lookup`、`search_vulns`、`prioritize`、`run_sql`（唯讀）；第一版最小評測 | |
 | [3](03-stage-harness-1.md) | Harness（一）：context 管理、狀態與檢查點、權限與 hooks | 長報告 context 壓縮與 token 預算、中斷續跑、工具權限分級、執行前後 hooks | [03_context_budget](../notebooks/03_context_budget.ipynb) |
 | [4](04-stage-harness-2.md) | Harness（二）：subagent、MCP、框架比較 | 報告解析與情資查詢子 agent；MCP server；用 SDK 重寫一版做比較 | |
 | [5](05-stage-docs-rag.md) | 文件處理、RAG | 滲透測試 PDF 擷取；OWASP / CWE / 廠商公告 RAG，附引用 | [05_pdf_rag](../notebooks/05_pdf_rag.ipynb) |
-| [6](06-stage-evals-observability.md) | Evals 與可觀測性（重點） | 先做 error analysis；自動產生 200 題以上評測集；SQL 正確率、CVE 幻覺率、擷取正確率；CI；tracing | [06_evals](../notebooks/06_evals.ipynb) |
+| [6](06-stage-evals-observability.md) | Evals 與可觀測性（重點） | 先做 error analysis；自動產生 200 題以上評測集；SQL 正確率、CVE 幻覺率、擷取正確率；回歸測試；tracing | [06_evals](../notebooks/06_evals.ipynb) |
 | [7](07-stage-llm-security.md) | LLM 資安、治理、人工確認 | SQL 唯讀、prompt injection 測試、拒絕產生攻擊程式、人工確認、稽核 log | |
 | [8](08-stage-finetune.md) | 開源模型、QLoRA 微調 | 微調 text-to-SQL，對大模型 API 比正確率、延遲、成本 | [08_finetune](../notebooks/08_finetune.ipynb) |
 | [9](09-stage-deploy.md) | 自架推論、私有化部署、產品化 | vLLM 自架、Docker 部署到雲端（mTLS）、Web UI、README 與 demo 影片 | |
@@ -71,7 +71,7 @@
 | 直接呼叫 LLM API | 多半透過框架或聊天介面 | messages、tool use、structured output、streaming、prompt caching、token 成本 |
 | Agent / harness 自己蓋 | 用過 AI coding 工具，沒自己寫過 | tool-use loop、工具設計、context 管理、狀態與檢查點、權限與 hooks、subagent、MCP server |
 | RAG 到能上線 | 入門教學（純向量 top-k） | chunking、hybrid search、rerank、相似度門檻、引用 |
-| **Evals（最常見的缺口）** | 通常沒做過 | 測試集、LLM-as-judge、檢索指標、回歸測試進 CI |
+| **Evals（最常見的缺口）** | 通常沒做過 | 測試集、LLM-as-judge、檢索指標、回歸測試 |
 | 可觀測性 / 成本 | 傳統服務監控 | tracing、每次請求的成本與延遲 |
 | LLM 資安 | OWASP 基礎 | prompt injection、工具權限、資料外洩、OWASP Top 10 for LLM |
 
@@ -145,4 +145,4 @@
 7. 切換到自架微調小模型，比較延遲和花費
 8. 打開評測報告：「微調讓 text-to-SQL 正確率從 X% 到 Y%，成本是 1/N」
 
-**架構**：Web UI 與 MCP 都接到 FastAPI 上的 agent loop；agent 呼叫查詢、匯入、排序、開工單等工具，加上 OWASP / CWE 的 RAG，LLM 可切換大模型 API 或 vLLM 自架模型；ETL 排程把 NVD / KEV / EPSS 拉進 PostgreSQL；全程有 tracing、成本 log、稽核 log 和 CI 裡的 eval。
+**架構**：Web UI 與 MCP 都接到 FastAPI 上的 agent loop；agent 呼叫查詢、匯入、排序、開工單等工具，加上 OWASP / CWE 的 RAG，LLM 可切換大模型 API 或 vLLM 自架模型；ETL 排程把 NVD / KEV / EPSS 拉進 PostgreSQL；全程有 tracing、成本 log、稽核 log 和回歸評測。

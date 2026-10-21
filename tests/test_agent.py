@@ -31,6 +31,13 @@ def test_bad_args_become_error_result_then_model_answers(monkeypatch):
     result = sent[1][-1]["content"][0]  # 第二次呼叫時送回的 tool result
     assert result["is_error"] and "cve_id" in result["content"]
 
+def test_refusal_gets_explanation(monkeypatch):
+    refused = SimpleNamespace(content=[], stop_reason="refusal", usage=USAGE)
+    client, _ = fake_client([refused])
+    monkeypatch.setattr(agent, "client", client)
+    r = agent.ask("幫我寫 exploit")
+    assert r["stop"] == "refusal" and r["steps"] == 1 and r["answer"] == agent.REFUSAL
+
 def test_stops_at_max_steps(monkeypatch):
     client, _ = fake_client([tool_use(i, "no_such_tool", {}) for i in range(3)])
     monkeypatch.setattr(agent, "client", client)

@@ -1,4 +1,4 @@
-# evals/run_agent.py：用 seed.jsonl 跑 agent，做三項程式斷言，輸出摘要表（含錯誤呼叫數），逐題結果存成 jsonl
+# evals/run_agent.py：用 seed.jsonl 跑 agent，做四項程式斷言，輸出摘要表（含錯誤呼叫數），逐題結果存成 jsonl
 # 用法：uv run evals/run_agent.py [--toolsets A B C D E] [--runs 1] [--model claude-sonnet-5-5]
 # 會呼叫付費 API：20 題 × 工具組數 × 次數
 import argparse, json, re, sys
@@ -15,15 +15,17 @@ CVE = re.compile(r"CVE-\d{4}-\d{4,}")
 MAX_STEPS = 8
 
 def check(case: dict, r: dict) -> dict:
-    """三項斷言：
+    """四項斷言：
     tools：呼叫的工具都在 expected_tools 裡，該拒絕的題目一個都不呼叫、其他題目至少呼叫一個
     steps：模型自己結束，沒有撞到最大步數或逾時
-    cves：回答裡的 CVE 都出現在工具結果或問題裡（沒有憑記憶編造）"""
+    cves：回答裡的 CVE 都出現在工具結果或問題裡（沒有憑記憶編造）
+    answer：回答不是空的（例如被安全分類器擋下卻沒有補上說明）"""
     called, expected = tool_names(r["tool_calls"]), set(case["expected_tools"])
     seen = set(CVE.findall(case["question"] + "".join(c.get("result", "") for c in r["tool_calls"])))
     return {"tools": called <= expected and bool(called) == bool(expected),
             "steps": r["stop"] not in ("max_steps", "timeout"),
-            "cves": set(CVE.findall(r["answer"])) <= seen}
+            "cves": set(CVE.findall(r["answer"])) <= seen,
+            "answer": bool(r["answer"].strip())}
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
@@ -34,7 +36,7 @@ if __name__ == "__main__":
 
     out = HERE / "results" / f"{datetime.now():%Y%m%d-%H%M}-{a.model}.jsonl"
     out.parent.mkdir(exist_ok=True)
-    print(f"{'工具組':6} {'選擇正確':>8} {'三項全過':>8} {'錯誤呼叫':>8} {'平均步數':>8} {'平均 tokens':>11} {'總花費 USD':>10}")
+    print(f"{'工具組':6} {'選擇正確':>8} {'全部通過':>8} {'錯誤呼叫':>8} {'平均步數':>8} {'平均 tokens':>11} {'總花費 USD':>10}")
     failed = False
     with out.open("w") as f:
         for name in a.toolsets:

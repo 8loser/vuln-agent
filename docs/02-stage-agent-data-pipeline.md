@@ -87,10 +87,10 @@
 
 - 讀 [`src/vuln_agent/agent.py`](../src/vuln_agent/agent.py)：
   - `SYSTEM`：保留階段 1 的規則，只能提工具結果裡的 CVE、拒絕 exploit 與範圍外問題，另外要求依錯誤訊息修正參數
-  - `run_agent()`：generator，每發生一件事就 yield 一個事件（`text`、`tool_use`、`tool_result`、`done`），串流和非串流共用。工具丟任何例外都包成 `is_error` 的 tool result 送回模型；停止條件是模型答完、`max_steps`（預設 8）、`timeout`（預設 120 秒），單一工具的逾時由資料庫的 `statement_timeout` 負責。每一步寫一行 JSON log（工具、參數、耗時、tokens、花費），結束時再寫一行總計
+  - `run_agent()`：generator，每發生一件事就 yield 一個事件（`text`、`tool_use`、`tool_result`、`done`），串流和非串流共用。工具丟任何例外都包成 `is_error` 的 tool result 送回模型；停止條件是模型答完、`max_steps`（預設 8）、`timeout`（預設 120 秒），單一工具的逾時由資料庫的 `statement_timeout` 負責。`stop_reason` 是 `refusal` 時，代表請求被 API 的安全分類器擋下、回答是空的，補上固定的拒絕說明 `REFUSAL`（跟階段 1 `parse()` 改回 `unsupported` 的處理一致），攻擊類問題多半在這一步就被擋下，還沒用到 `SYSTEM` 的拒絕規則。每一步寫一行 JSON log（工具、參數、耗時、tokens、花費），結束時再寫一行總計
   - `ask()`：跑完整個迴圈，收成一個結果
 - 讀 [`src/vuln_agent/agent_api.py`](../src/vuln_agent/agent_api.py)：`/ask` 回傳回答與每次工具呼叫，`/ask/stream` 用 SSE 送出每個事件
-- 讀 [`tests/test_agent.py`](../tests/test_agent.py)：用假的 client 測「參數錯誤變成 error result、模型接著回答」和「撞到最大步數會停」，不花錢
+- 讀 [`tests/test_agent.py`](../tests/test_agent.py)：用假的 client 測「參數錯誤變成 error result、模型接著回答」「被拒絕時補上說明」和「撞到最大步數會停」，不花錢
 - 用 `uv run uvicorn vuln_agent.agent_api:app --reload` 啟動，另開一個終端機試：
 
   ```bash
@@ -117,7 +117,7 @@
   - C：作品用的 `TOOLS`，描述寫清楚何時用、何時不用，加上參數範例
   - D、E：把 B、C 的工具名稱換成沒有意義的 `tool_1` 到 `tool_4`，其他不變。`renamed()` 同時換掉描述裡提到的其他工具名稱，以及參數類別的名稱（schema 的 `title` 是類別名稱，例如 `SearchVulnsArgs`，不換會透露原本的工具名稱）
   - `tool_names()`：把 A 的 `query_vulns` 依 `intent`、D 和 E 的 `tool_N` 換回對應的工具名稱，五組才能用同一份 `expected_tools` 評分
-- 讀 [`evals/run_agent.py`](../evals/run_agent.py)：`check()` 做三項斷言（工具選擇、沒撞到步數上限、回答裡的 CVE 都出自工具結果）
+- 讀 [`evals/run_agent.py`](../evals/run_agent.py)：`check()` 做四項斷言（工具選擇、沒撞到步數上限、回答裡的 CVE 都出自工具結果、回答不是空的）
   - 摘要表的「錯誤呼叫」是回傳 `is_error` 的工具呼叫總數，只計數、不算沒過：模型收到錯誤訊息後修正參數是合理行為，但每次都多花一步。`tools` 斷言只看呼叫過哪些工具，選錯再改對也會過，要靠這一欄看出差別
 - 執行 `uv run evals/run_agent.py --toolsets A B C D E --runs 2`，會呼叫付費 API（20 題 × 5 組 × 2 次）。終端機印出摘要表與沒過的題目，逐題結果存在 `evals/results/`
 

@@ -5,6 +5,7 @@ from vuln_agent.llm import client, cost, DEFAULT_MODEL
 from vuln_agent.tools import TOOLS, ToolError, call_tool, schemas
 
 log = logging.getLogger("vuln_agent")
+REFUSAL = "這個問題超出漏洞情資助理的範圍：只能查詢漏洞資料與修補優先順序，不提供攻擊程式、payload 或繞過防護的方法。"
 
 SYSTEM = """你是漏洞情資助理，用繁體中文回答，漏洞資料一律用工具查。
 - 只能提到工具結果裡出現的 CVE 編號與分數，不要憑記憶補充；漏洞俗稱（例如 log4shell）要先用工具查出對應的 CVE
@@ -59,6 +60,8 @@ def run_agent(question: str, tools=TOOLS, model: str = DEFAULT_MODEL, max_steps:
     if stop in ("max_steps", "timeout"):
         reason = f"已達最大步數 {max_steps}" if stop == "max_steps" else f"超過 {timeout} 秒"
         yield "text", f"\n\n查詢未完成：{reason}，以上是目前查到的部分。"
+    elif stop == "refusal":  # 被安全分類器擋下時回答是空的，補上跟 SYSTEM 拒絕規則一致的說明（同 intent.py 的處理）
+        yield "text", REFUSAL
     summary = {"stop": stop, "steps": len(usages), "seconds": round(time.time() - start, 2),
                "input_tokens": sum(u.input_tokens for u in usages),
                "output_tokens": sum(u.output_tokens for u in usages),

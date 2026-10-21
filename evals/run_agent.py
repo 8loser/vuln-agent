@@ -1,5 +1,5 @@
 # evals/run_agent.py：用 seed.jsonl 跑 agent，做三項程式斷言，輸出摘要表（含錯誤呼叫數），逐題結果存成 jsonl
-# 用法：uv run evals/run_agent.py [--toolsets A B C] [--runs 1] [--model claude-sonnet-5-5]
+# 用法：uv run evals/run_agent.py [--toolsets A B C D E] [--runs 1] [--model claude-sonnet-5-5]
 # 會呼叫付費 API：20 題 × 工具組數 × 次數
 import argparse, json, re, sys
 from datetime import datetime

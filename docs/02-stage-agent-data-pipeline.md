@@ -20,7 +20,7 @@
 - **Tool-use loop**：模型回「要呼叫工具」→ 程式執行 → 把結果送回 → 重複到模型給出最終答案。agent 的核心就這幾行，先手寫一次，之後用框架才知道它替你做了什麼。
 - **錯誤也是給模型看的訊息**：工具出錯時回一段模型看得懂的錯誤（哪個參數錯、合法值是什麼），模型多半能自己修正重試；直接丟 exception 只會讓整個 loop 中斷。
 - **停止條件**：最大步數、單一工具逾時、整體逾時，少了這些，模型反覆呼叫同一個工具時花費會失控。
-- **工具設計就是 prompt 設計**：工具的粒度、名稱、描述、參數 schema 會直接影響模型選對工具的機率，要用測試題量化比較，不能憑感覺。
+- **工具設計就是 prompt 設計**：工具的粒度（同一組功能拆成幾個工具，例如一個大工具包辦所有查詢，或拆成四個各做一件事）、名稱、描述、參數 schema 會直接影響模型選對工具的機率，要用測試題量化比較，不能憑感覺。
 - **唯讀的 `run_sql` 要靠資料庫權限把關**：只檢查 SQL 字串擋不住所有寫入，要用唯讀角色、唯讀交易、`statement_timeout` 和筆數上限多層防護。
 - **ETL 的冪等與增量**：NVD 有速率限制，每次全量重抓不實際；記錄上次成功的時間點、只抓變更、用 upsert 寫入，重跑幾次結果都一樣。
 
@@ -108,19 +108,56 @@
 
 ### 步驟 5：工具設計比較
 
-這一步要理解工具設計怎麼量化比較。同一組題目換三種工具組，看選擇正確率、錯誤呼叫數、步數與花費，才知道描述、粒度、命名值不值得多花 tokens。
+這一步要理解工具設計的三個面向各自影響什麼：粒度決定模型會不會傳錯參數，描述決定模型要花幾步摸清楚資料，命名在描述與參數 schema 都寫清楚時幾乎沒有影響。五種工具組是控制變因的設計，每兩組之間只差其中一項，兩兩比較才能把差異歸因到單一面向。
 
 - 讀 [`evals/seed.jsonl`](../evals/seed.jsonl)：20 題，每題的 `expected_tools` 是可以接受的工具；空的代表應該拒絕、不呼叫工具。後 10 題加入排序、統計、payload 這類題目，排序與統計題不在 `QueryIntent` 的範圍，所以沒有 `expected`
 - 讀 [`evals/toolsets.py`](../evals/toolsets.py)：
   - A：只有一個 `query_vulns(intent, ...)`，所有參數攤在同一個 schema
   - B：四個小工具，描述只有一行（參數 schema 跟 C 一樣）
   - C：作品用的 `TOOLS`，描述寫清楚何時用、何時不用，加上參數範例
-  - `tool_names()`：把 A 的 `query_vulns` 依 `intent` 換成對應的工具名稱，三組才能用同一份 `expected_tools` 評分
+  - D、E：把 B、C 的工具名稱換成沒有意義的 `tool_1` 到 `tool_4`，其他不變。`renamed()` 同時換掉描述裡提到的其他工具名稱，以及參數類別的名稱（schema 的 `title` 是類別名稱，例如 `SearchVulnsArgs`，不換會透露原本的工具名稱）
+  - `tool_names()`：把 A 的 `query_vulns` 依 `intent`、D 和 E 的 `tool_N` 換回對應的工具名稱，五組才能用同一份 `expected_tools` 評分
 - 讀 [`evals/run_agent.py`](../evals/run_agent.py)：`check()` 做三項斷言（工具選擇、沒撞到步數上限、回答裡的 CVE 都出自工具結果）
   - 摘要表的「錯誤呼叫」是回傳 `is_error` 的工具呼叫總數，只計數、不算沒過：模型收到錯誤訊息後修正參數是合理行為，但每次都多花一步。`tools` 斷言只看呼叫過哪些工具，選錯再改對也會過，要靠這一欄看出差別
-- 執行 `uv run evals/run_agent.py --toolsets A B C --runs 2`，會呼叫付費 API（20 題 × 3 組 × 2 次）。終端機印出摘要表與沒過的題目，逐題結果存在 `evals/results/`
-- 挑選錯的題目，從 jsonl 看模型呼叫了什麼，判斷是描述、命名還是 schema 造成的；改 `tools.py` 的描述再跑一次 C
-- 記下：三組的比較表，選定哪一組、為什麼，以及哪種錯誤訊息讓模型改得回來
+- 執行 `uv run evals/run_agent.py --toolsets A B C D E --runs 2`，會呼叫付費 API（20 題 × 5 組 × 2 次）。終端機印出摘要表與沒過的題目，逐題結果存在 `evals/results/`
+
+重點：
+
+- **粒度（A 對 B）：參數限制要能寫進 schema**
+  - A 的錯誤呼叫明顯比 B 多，B 通常是 0
+  - 攤平成一個大工具後，表達不了「這個參數屬於哪個 `intent`」「用這個 `intent` 時哪些參數必填」：A 會對 `prioritize` 傳搜尋條件、對 `cve_lookup` 傳 `cve_ids`，靠錯誤訊息才改對
+  - 拆成小工具，每個工具的必填、範圍、格式都在自己的 schema 裡，模型呼叫前就看得到
+  - A 傳出超過上限的 `limit`，是 `QueryVulnsArgs` 少寫了限制，這類限制攤平的 schema 也寫得進去
+- **描述（B 對 C）：寫模型自己推不出來的資訊**
+  - 統計題（`expected_tools` 只有 `run_sql`）的步數是 A > B > C
+  - C 的 `run_sql` 描述列出資料表，第一步就寫出正確的 SQL
+  - B 從參數說明知道是 PostgreSQL，先查 `information_schema` 再寫
+  - A 沒有任何資料庫資訊，直接猜表名，猜錯再去查
+  - C 的描述比較長，每一步的 tokens 比較多，但步數少，總花費和 B 差距不大
+- **命名（B 對 D、C 對 E）：描述與參數 schema 寫清楚時，名稱幾乎不影響選擇**
+  - 換成 `tool_1` 到 `tool_4` 後，錯誤呼叫仍是 0，平均步數的差距遠小於粒度、描述造成的差距
+  - 多出的步數來自個別題目多查一次，同樣的行為在沒改名的組也會出現
+  - 名稱的影響出現在缺資訊的時候：A 猜的表名 `vulns`、條件 `in_kev = 1`，和工具名稱 `query_vulns`、參數 `in_kev` 對得上，模型拿名稱去推測工具以外的東西
+- **錯誤訊息：寫出合法值或正確的參數名稱**
+  - A 的錯誤呼叫都會被下一步修正，但修正的成本不同
+  - `limit：Input should be less than or equal to 50（收到 1000）`、`cve_ids：Field required`：訊息裡有合法值或缺的參數，下一步就改對，或改用別的工具
+  - `relation "vulns" does not exist`：訊息只說表不存在，沒說有哪些表，模型下一步都先查 `information_schema`，多花兩步才寫出正確的 SQL
+  - `call_tool()` 把 Pydantic 的驗證錯誤整理成「哪個參數、哪裡錯、收到什麼」，就是讓模型一步修好
+- **評測：沒過的題目先判斷是模型錯還是標準窄**
+  - 「最近 14 天被利用的 XSS」：`search_vulns` 的 `days` 過濾的是發布日期，模型會再用 `run_sql` 依加入 KEV 的日期（`date_added`）查一次。這種解讀更貼近「最近被利用」，所以 `expected_tools` 列了 `run_sql`
+  - 「EPSS 超過 0.9 而且 CVSS 9 以上」：有時會多用 `run_sql` 分組計數，但 `search_vulns` 的 `total` 已經回答了數量，這一步是多餘的，而且時有時無，維持判為沒過
+
+用這兩條指令對照自己的結果：
+
+```bash
+f=$(ls -t evals/results/*.jsonl | head -1)
+# 每次出錯的工具呼叫（看 A 的錯誤屬於哪一類）
+jq -c '.toolset as $t | .tool_calls[] | select(.is_error) | {toolset: $t, input, result: .result[:60]}' $f
+# 統計題在各組的第一步（看 A、B、C 分別怎麼開始）
+jq -c 'select(.question == "KEV 裡的漏洞，平均 EPSS 是多少？") | {toolset, run, first: .tool_calls[0].input}' $f
+```
+
+- 記下：五組的比較表（含錯誤呼叫數），步驟 7 收尾會用到
 
 ### 步驟 6：最小評測
 
@@ -140,4 +177,4 @@
 - 記下這個階段的架構（ETL → PostgreSQL → 工具 → agent loop → FastAPI）、工具清單與工具設計比較表，之後階段 3 會在這個 loop 上加 harness
 - （選做）寫一篇文章：「不用框架手寫 agent loop：用 NVD / KEV / EPSS 練 tool use、工具設計與 ETL 增量更新」
 
-**完成標準**：`docker compose up` 能起 PostgreSQL，ETL 排程每天更新，NVD 增量更新中斷後重跑不會重複，`etl_runs` 有紀錄；`uv run pytest` 全過，`run_sql` 擋得住寫入、多條語句和長時間查詢；`/ask` 走 agent loop，log 看得到每一步的工具、參數、tokens 與花費，碰到最大步數或逾時會正常結束；有三種工具組的比較表（選擇正確率、步數、花費），並能說明為什麼選定的那一組比較好，以及錯誤訊息怎麼寫才能讓模型自己修正。
+**完成標準**：`docker compose up` 能起 PostgreSQL，ETL 排程每天更新，NVD 增量更新中斷後重跑不會重複，`etl_runs` 有紀錄；`uv run pytest` 全過，`run_sql` 擋得住寫入、多條語句和長時間查詢；`/ask` 走 agent loop，log 看得到每一步的工具、參數、tokens 與花費，碰到最大步數或逾時會正常結束；有五種工具組的比較表（選擇正確率、錯誤呼叫數、步數、花費），能說明粒度、描述、命名各自影響哪個指標、為什麼選定的那一組比較好，以及錯誤訊息怎麼寫才能讓模型自己修正。

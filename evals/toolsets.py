@@ -1,4 +1,5 @@
-# evals/toolsets.py：步驟 5 比較的三種工具組。C 就是作品用的 vuln_agent.tools.TOOLS，A、B 只為了對照
+# evals/toolsets.py：步驟 5 比較的五種工具組。C 就是作品用的 vuln_agent.tools.TOOLS，其他只為了對照
+import re
 from dataclasses import replace
 from typing import Literal
 
@@ -39,8 +40,24 @@ B = {name: replace(t, description=ONE_LINE[name]) for name, t in TOOLS.items()}
 # C. 四個小工具，描述寫清楚何時用、何時不用與參數範例
 C = TOOLS
 
-TOOLSETS = {"A": A, "B": B, "C": C}
+# D、E. 把 B、C 的工具名稱換成沒有意義的 tool_1 到 tool_4，描述裡提到的其他工具也一起換，其他不變
+# run_sql 拒絕非 SELECT 時的錯誤訊息仍寫著 run_sql（tools.py），只有送出寫入語句時才會看到
+RENAMED = {name: f"tool_{i}" for i, name in enumerate(TOOLS, 1)}
+ORIGINAL = {v: k for k, v in RENAMED.items()}
+
+def renamed(tools: dict[str, Tool]) -> dict[str, Tool]:
+    """參數類別也換成子類別：schema 的 title 是類別名稱（例如 SearchVulnsArgs），不換會透露原本的工具名稱。"""
+    names = re.compile(r"\b(" + "|".join(RENAMED) + r")\b")
+    return {RENAMED[n]: replace(t, name=RENAMED[n], description=names.sub(lambda m: RENAMED[m[1]], t.description),
+                                args=type(RENAMED[n].title().replace("_", "") + "Args", (t.args,), {}))
+            for n, t in tools.items()}
+
+D = renamed(B)
+E = renamed(C)
+
+TOOLSETS = {"A": A, "B": B, "C": C, "D": D, "E": E}
 
 def tool_names(calls: list[dict]) -> set[str]:
-    """把工具呼叫換成邏輯上的工具名稱；A 的 query_vulns 看 intent 參數，三組才能用同一份 expected_tools 比較。"""
-    return {c["input"].get("intent", c["name"]) if c["name"] == "query_vulns" else c["name"] for c in calls}
+    """把工具呼叫換成邏輯上的工具名稱；A 的 query_vulns 看 intent 參數，D、E 換回原名，五組才能用同一份 expected_tools 比較。"""
+    return {c["input"].get("intent", c["name"]) if c["name"] == "query_vulns" else ORIGINAL.get(c["name"], c["name"])
+            for c in calls}

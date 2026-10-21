@@ -102,7 +102,7 @@
 
 - 觀察：
   - 統計類問題模型會改用 `run_sql`，看它寫的 SQL 對不對
-  - 問「CVSS 15 分以上的漏洞」，模型傳 `min_cvss: 15` 會收到錯誤訊息，看它怎麼修正或說明
+  - 問「CVSS 15 分以上的漏洞」，可能出現兩種結果：模型從工具 schema 的 `"maximum": 10`（`SearchVulnsArgs` 的 `le=10`）看出條件不合理，不呼叫工具直接說明分數範圍；或是傳 `min_cvss: 15`，收到 `call_tool()` 的錯誤訊息後修正參數或說明。用 `/ask` 看 `tool_calls` 是空的，還是有一筆 `is_error: true`
   - 問「log4shell 現在 EPSS 多少」，看模型是先用工具查出 CVE，還是憑記憶直接 `cve_lookup`
   - 啟動服務的終端機裡，每一步的 log 與總計
 

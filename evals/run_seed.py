@@ -1,4 +1,4 @@
-# evals/run_seed.py：用 seed.jsonl 的 10 題比較大小兩個模型的解析命中數、平均延遲、總花費
+# evals/run_seed.py：用 seed.jsonl 裡有 expected 的題目比較大小兩個模型的解析命中數、平均延遲、總花費
 import json, time
 from pathlib import Path
 

@@ -20,3 +20,6 @@ CLAUDE.local.md
 
 # Jupyter Book 建置輸出
 _build/
+
+# 評測的逐題結果
+evals/results/

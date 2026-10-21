@@ -108,7 +108,7 @@
 
 ### 步驟 5：工具設計比較
 
-這一步要理解工具設計怎麼量化比較。同一組題目換三種工具組，看選擇正確率、步數與花費，才知道描述、粒度、命名值不值得多花 tokens。
+這一步要理解工具設計怎麼量化比較。同一組題目換三種工具組，看選擇正確率、錯誤呼叫數、步數與花費，才知道描述、粒度、命名值不值得多花 tokens。
 
 - 讀 [`evals/seed.jsonl`](../evals/seed.jsonl)：20 題，每題的 `expected_tools` 是可以接受的工具；空的代表應該拒絕、不呼叫工具。後 10 題加入排序、統計、payload 這類題目，排序與統計題不在 `QueryIntent` 的範圍，所以沒有 `expected`
 - 讀 [`evals/toolsets.py`](../evals/toolsets.py)：
@@ -117,6 +117,7 @@
   - C：作品用的 `TOOLS`，描述寫清楚何時用、何時不用，加上參數範例
   - `tool_names()`：把 A 的 `query_vulns` 依 `intent` 換成對應的工具名稱，三組才能用同一份 `expected_tools` 評分
 - 讀 [`evals/run_agent.py`](../evals/run_agent.py)：`check()` 做三項斷言（工具選擇、沒撞到步數上限、回答裡的 CVE 都出自工具結果）
+  - 摘要表的「錯誤呼叫」是回傳 `is_error` 的工具呼叫總數，只計數、不算沒過：模型收到錯誤訊息後修正參數是合理行為，但每次都多花一步。`tools` 斷言只看呼叫過哪些工具，選錯再改對也會過，要靠這一欄看出差別
 - 執行 `uv run evals/run_agent.py --toolsets A B C --runs 2`，會呼叫付費 API（20 題 × 3 組 × 2 次）。終端機印出摘要表與沒過的題目，逐題結果存在 `evals/results/`
 - 挑選錯的題目，從 jsonl 看模型呼叫了什麼，判斷是描述、命名還是 schema 造成的；改 `tools.py` 的描述再跑一次 C
 - 記下：三組的比較表，選定哪一組、為什麼，以及哪種錯誤訊息讓模型改得回來

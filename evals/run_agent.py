@@ -1,4 +1,4 @@
-# evals/run_agent.py：用 seed.jsonl 跑 agent，做三項程式斷言，輸出摘要表，逐題結果存成 jsonl
+# evals/run_agent.py：用 seed.jsonl 跑 agent，做三項程式斷言，輸出摘要表（含錯誤呼叫數），逐題結果存成 jsonl
 # 用法：uv run evals/run_agent.py [--toolsets A B C] [--runs 1] [--model claude-sonnet-5-5]
 # 會呼叫付費 API：20 題 × 工具組數 × 次數
 import argparse, json, re, sys
@@ -34,7 +34,7 @@ if __name__ == "__main__":
 
     out = HERE / "results" / f"{datetime.now():%Y%m%d-%H%M}-{a.model}.jsonl"
     out.parent.mkdir(exist_ok=True)
-    print(f"{'工具組':6} {'選擇正確':>8} {'三項全過':>8} {'平均步數':>8} {'平均 tokens':>11} {'總花費 USD':>10}")
+    print(f"{'工具組':6} {'選擇正確':>8} {'三項全過':>8} {'錯誤呼叫':>8} {'平均步數':>8} {'平均 tokens':>11} {'總花費 USD':>10}")
     failed = False
     with out.open("w") as f:
         for name in a.toolsets:
@@ -53,7 +53,9 @@ if __name__ == "__main__":
             n = len(results)
             passed = sum(all(ok.values()) for _, ok in results)
             failed |= passed < n
-            print(f"{name:6} {sum(ok['tools'] for _, ok in results):>4}/{n:<3} {passed:>4}/{n:<3}"
+            # 錯誤呼叫只計數、不算沒過：模型收到錯誤訊息後修正參數是合理行為，但每次都多花一步
+            errors = sum(c.get("is_error", False) for r, _ in results for c in r["tool_calls"])
+            print(f"{name:6} {sum(ok['tools'] for _, ok in results):>4}/{n:<3} {passed:>4}/{n:<3} {errors:>8}"
                   f" {sum(r['steps'] for r, _ in results) / n:>8.1f}"
                   f" {sum(r['input_tokens'] + r['output_tokens'] for r, _ in results) / n:>11.0f}"
                   f" {sum(r['cost_usd'] for r, _ in results):>10.4f}")

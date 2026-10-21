@@ -161,16 +161,18 @@ jq -c 'select(.question == "KEV 裡的漏洞，平均 EPSS 是多少？") | {too
 
 ### 步驟 6：最小評測
 
-這一步要理解評測怎麼變成每次改動後都跑一次的回歸測試。先只用程式斷言，不用 LLM 當評審；完整的 error analysis、LLM-as-judge 和大型評測集留在階段 6。之後每加一個 harness 功能，都先跑這組測試看數字有沒有變。
+這一步要理解評測怎麼變成每次改動後都跑一次的回歸測試。先只用程式斷言，不用 LLM 當評審；完整的 error analysis、LLM-as-judge 和大型評測集留在階段 6。
 
-- 三組不呼叫 LLM 的測試，`uv run pytest` 一次跑完：
+- 三組不呼叫 LLM 的測試，`uv run pytest` 一次跑完，結果只有通過與失敗，要維持全過：
   - [`tests/test_tools.py`](../tests/test_tools.py)：四個工具
   - [`tests/test_data.py`](../tests/test_data.py)：ETL 資料斷言，各表有資料、`cve_id` 格式正確、KEV 的 CVE 幾乎都找得到 `cve` 資料、分數在合法範圍
   - [`tests/test_agent.py`](../tests/test_agent.py)：loop 的停止條件與錯誤處理
-- 兩組呼叫 LLM 的評測：
-  - 結構化擷取：`uv run evals/run_seed.py`（階段 1 的腳本），`QueryIntent` 逐欄比對 `expected`
-  - Agent 斷言：`uv run evals/run_agent.py`，就是步驟 5 用 C 跑的那組
+- 兩組呼叫 LLM 的評測，會印出數字，第一次跑的結果記下來當基準：
+  - 結構化擷取：`uv run evals/run_seed.py`（階段 1 的腳本），`QueryIntent` 逐欄比對 `expected`，看命中數
+  - Agent 斷言：`uv run evals/run_agent.py`，就是步驟 5 用 C 跑的那組，看摘要表的選擇正確、全部通過、錯誤呼叫、平均步數與花費；逐題結果存在 `evals/results/`，可以拿來找出是哪一題變了
 - 之後每碰到一個答錯的問題，就加進 `seed.jsonl`
+
+步驟 4 的 loop 是最陽春的 harness，也就是包在模型外面、負責組 context、執行工具、檢查權限、決定何時停止的那層程式。階段 3、4 會在它上面陸續加功能，例如工具結果裁剪、檢查點、權限 hooks、子 agent。每加一項就把上面兩類都跑一次：pytest 有任何一個沒過，或評測的命中數、選擇正確、全部通過比基準少，錯誤呼叫、步數比基準多，就是這次改動讓結果變差。
 
 ### 步驟 7：收尾
 

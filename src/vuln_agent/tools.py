@@ -132,7 +132,7 @@ def run_sql(query_text: str) -> dict:
     except psycopg.errors.QueryCanceled:
         raise ToolError("查詢超過 5 秒被中止，請加上條件或改用索引欄位（published、cvss_score、product、epss）縮小範圍")
     except (psycopg.errors.InsufficientPrivilege, psycopg.errors.ReadOnlySqlTransaction):
-        raise ToolError("沒有權限：只能 SELECT cve、cve_product、kev、epss 四張表")
+        raise ToolError("沒有權限：只能 SELECT cve、cve_product、kev、epss、reports、findings")
     except psycopg.Error as e:  # 欄位名稱打錯、語法錯誤等，原始訊息最能幫模型修正
         raise ToolError(f"SQL 執行錯誤：{e}")
     return {"rows": rows[:MAX_SQL_ROWS], "truncated": len(rows) > MAX_SQL_ROWS}
@@ -170,6 +170,7 @@ TOOLS = {t.name: t for t in [
 - cve_product(cve_id, cpe, vendor, product)；vendor、product 是小寫
 - kev(cve_id, vendor, product, date_added, due_date)；vendor、product 是原始大小寫，例如 'Microsoft'
 - epss(cve_id, epss, percentile, score_date)
+- reports(report_id, path, imported_at)、findings(id, report_id, cve_id, pkg_name, src_name, installed_version, fixed_version, severity, target)：import_report 匯入的掃描報告，查 findings 一定要加 report_id 條件
 範例：{{"query": "SELECT vendor, count(*) AS n FROM kev GROUP BY vendor ORDER BY n DESC LIMIT 10"}}""",
          RunSqlArgs, lambda query: run_sql(query)),
 ]}

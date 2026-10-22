@@ -37,7 +37,7 @@
 
 - 讀 [`docker-compose.yml`](../docker-compose.yml)：PostgreSQL 16，只綁 `127.0.0.1:5432`，資料放在 `pgdata` volume
 - 讀 [`db/init.sh`](../db/init.sh)：volume 是空的時候自動執行
-  - 兩個角色：`vuln_etl` 擁有資料表；`vuln_agent` 只能 SELECT 四張資料表，連線預設唯讀交易、`statement_timeout` 5 秒，看不到 `etl_runs`
+  - 兩個角色：`vuln_etl` 擁有資料表；`vuln_agent` 只能 SELECT 四張資料表（階段 3 再加上掃描報告的 `reports`、`findings`），連線預設唯讀交易、`statement_timeout` 5 秒，看不到 `etl_runs`
   - `cve_product` 把一個 CVE 對多個 CPE 拆成一對多，`vendor`、`product` 取自 CPE 字串，`search_vulns` 用它比對產品
   - `kev` 不設外鍵到 `cve`：KEV 收的 CVE 可能很舊，不一定在 `cve` 的時間範圍
   - `etl_runs` 的 `watermark` 是增量更新的起點

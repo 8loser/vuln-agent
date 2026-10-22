@@ -57,6 +57,26 @@ CREATE TABLE epss (
 );
 CREATE INDEX ON epss (epss);
 
+-- 階段 3：匯入的掃描報告。reports 一份報告一列，findings 是攤平後的弱點，一個 CVE 出現在多個套件就是多列
+CREATE TABLE reports (
+    report_id   bigserial PRIMARY KEY,
+    path        text NOT NULL,
+    imported_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE findings (
+    id                bigserial PRIMARY KEY,  -- query_findings 的分頁 cursor
+    report_id         bigint NOT NULL REFERENCES reports ON DELETE CASCADE,
+    cve_id            text NOT NULL,          -- Trivy 的 VulnerabilityID，大多是 CVE，也可能是 GHSA 等編號
+    pkg_name          text NOT NULL,
+    src_name          text NOT NULL,          -- 來源套件，例如 Alpine 的 libssl3、libcrypto3 都來自 openssl
+    installed_version text,
+    fixed_version     text,
+    severity          text NOT NULL,
+    target            text                    -- Trivy 的 Results[].Target，例如作業系統套件或某個執行檔
+);
+CREATE INDEX ON findings (report_id, severity);
+
 -- 每次 ETL 一列；watermark 是這次資料的時間點，NVD 下次增量從上次成功的 watermark 開始抓
 CREATE TABLE etl_runs (
     id          bigserial PRIMARY KEY,
@@ -69,7 +89,7 @@ CREATE TABLE etl_runs (
     error       text
 );
 
--- agent 只看得到四張資料表，etl_runs 不開放
-GRANT SELECT ON cve, cve_product, kev, epss TO vuln_agent;
+-- agent 只看得到漏洞資料與掃描報告，etl_runs 不開放；報告由 import_report 用 vuln_etl 寫入
+GRANT SELECT ON cve, cve_product, kev, epss, reports, findings TO vuln_agent;
 RESET ROLE;
 SQL

@@ -18,23 +18,28 @@
 所有指令都在 repo 根目錄執行。
 
 1. 裝好 [Trivy](https://trivy.dev/docs/latest/getting-started/installation/)。Trivy 是獨立的命令列工具，不在 `uv sync` 的套件裡；官方安裝頁有 Debian/Ubuntu、Homebrew、Windows、Arch Linux 等做法，依作業系統選一種。第一次掃描會先下載漏洞資料庫，要連網
-2. `docker compose up -d` 起 PostgreSQL，步驟 2 起報告會存進資料庫
+2. `docker compose up -d` 起 PostgreSQL，步驟 2 起報告會存進資料庫。這個階段在 [`db/init.sh`](../db/init.sh) 加了 `reports`、`findings` 兩張表，`init.sh` 只在資料庫第一次建立時執行；階段 1、2 已經起過資料庫的話，先 `docker compose down -v` 刪掉舊的 volume，再 `docker compose up -d`，然後重跑 `uv run scripts/etl.py` 抓回漏洞資料
 3. `mkdir -p data/reports/trivy` 建報告目錄，Trivy 的 `--output` 不會自動建目錄
+4. 確認測試能過：`uv run pytest`，階段 3 的測試在 [`tests/test_report.py`](../tests/test_report.py)
 
 ### 步驟 1：準備測試報告與量出基準
 
 - 用 Trivy 掃自己的 Docker image，輸出 JSON：例如 `trivy image --format json --output data/reports/trivy/myapp.json <你的 image>`。image 名稱要寫成「repository:tag」，例如 `postgres:16-alpine`，也就是 `docker image ls` 的 REPOSITORY 和 TAG 兩欄用冒號接起來；只寫 tag 時 Docker 會把它當成 repository 名稱，找不到 image。想要多一點結果，可以用舊版 base image 另 build 一個練習用 image。只掃自己的 image，`data/reports/` 加進 `.gitignore`（參數以 Trivy 官方文件為準）
 - 寫小腳本統計報告內容：各 severity 筆數、不重複 CVE 數、有 `FixedVersion` 的比例，再算一下整份 JSON 有多少 tokens。token 數由模型的 tokenizer 決定，tokenizer 會隨模型版本更新，所以要用實際呼叫的模型來算，換模型就重量，說明在 notebook 1.2
-- 新增工具 `read_scan_report(path)`，先寫成最天真的版本，直接回傳整份 JSON
-- 準備 5 題報告相關問題（例如「有幾個 Critical？」「哪些在 KEV 裡、要先修？」「openssl 相關的有哪些、修到哪一版？」），附上用 SQL 或腳本算出的標準答案
-- 用天真版跑這 5 題，記錄每題的 input tokens、花費、延遲、答對與否；如果超過模型的 context 上限或直接報錯，也記下來
+- 讀 [`src/vuln_agent/report.py`](../src/vuln_agent/report.py) 的 `read_scan_report()`：最天真的版本，直接回傳整份 JSON；`report_path()` 只接受 `data/reports/` 底下的檔案，模型傳 `../.env` 這類路徑會收到錯誤
+- 準備 5 題報告相關問題（例如「有幾個 Critical？」「哪些在 KEV 裡、要先修？」「openssl 相關的有哪些、修到哪一版？」），附上用 SQL 或腳本算出的標準答案；每題要考什麼、觀察什麼，見 notebook 1.3
+- 用天真版跑這 5 題，記錄每題的 input tokens、花費、延遲、答對與否；如果超過模型的 context 上限或直接報錯，也記下來。notebook 1.4 的 `run_case()` 用 [`src/vuln_agent/agent.py`](../src/vuln_agent/agent.py) 的 `ask()` 跑一題，三種策略的工具組合與參數寫在 `STRATEGIES`
 
 ### 步驟 2：Context 管理：裁剪、摘要、token 預算
 
-- 改寫匯入流程：`import_report` 把報告解析成扁平的列（CVE、套件、目前版本、修補版本、severity）存進 PostgreSQL 的 `findings` 表，只回傳一個 `report_id` 和統計摘要（各等級筆數、前 10 筆）
-- 新增 `query_findings(report_id, severity, package, in_kev, limit, cursor)`，`limit` 有上限，回傳結果附 `total` 和下一頁的 `cursor`，讓模型知道還有多少筆沒看
-- 在 loop 裡加一層通用的工具結果裁剪：任何工具結果超過 N tokens 就截斷，並在結果中寫明「已截斷，共 X 筆，請用篩選條件縮小範圍」
-- 加對話層級的 token 預算：每輪呼叫前估算 context 大小，超過門檻時把較早的工具結果換成一行摘要，保留使用者原始問題和已確認的結論
+- 讀 [`src/vuln_agent/report.py`](../src/vuln_agent/report.py)：
+  - `parse_trivy()`：把報告攤平成一列一筆（CVE、套件、來源套件、目前版本、修補版本、severity）。來源套件只記在 `Results[].Packages[]` 的 `SrcName`，例如 Alpine 的 `libssl3`、`libcrypto3` 都來自 openssl，問「openssl 相關的」要靠它
+  - `import_report()`：用 `vuln_etl` 把攤平的列存進 `findings` 表，只回傳 `report_id` 和統計摘要（各等級筆數、最嚴重的前 10 筆）
+  - `query_findings()`：依 severity、套件、是否在 KEV 篩選，`limit` 有上限，回傳結果附 `total` 和 `next_cursor`，讓模型知道還有多少筆沒看；`total` 在套用 cursor 之前算，每一頁拿到的都是全部符合的筆數。分組計數這類統計，模型用 `run_sql` 查 `findings` 表
+- 讀 [`src/vuln_agent/context.py`](../src/vuln_agent/context.py)：
+  - `trim_result()`：通用的工具結果裁剪，超過預算就從最長的清單尾端截掉，並寫明「已截斷，只回傳 X / Y 筆，請用篩選條件或分頁縮小範圍」。`run_agent()` 收到 `trim_tokens` 時，在工具結果接進 messages 之前就裁好
+  - `estimate_tokens()`：依字元數粗估 token。`CHARS_PER_TOKEN` 用 `count_tokens` 實測，JSON 約 1.8 字元一個 token，換模型要重量
+  - `compact()`：對話層級的 token 預算。`run_agent()` 收到 `context_tokens` 時，每輪呼叫前估算對話大小，超過就把整段換成一則摘要訊息（原始問題、已說過的結論、每次工具呼叫的一行紀錄、最近一次的工具結果），從摘要重新開始。只把較早的工具結果換成摘要、其他訊息照留，會改寫到被 thinking block 綁定的歷史，Sonnet 5.5 這類模型會拒絕或丟掉推理內容；原因與 API 內建的 context editing、compaction 對照在 notebook 2.2
 - 實驗：天真版、裁剪版、裁剪加壓縮版各跑一次 5 題，做一張表比較每題 tokens、花費、延遲、答對數；另外刻意把對話拉長到 20 輪，觀察答案品質何時開始下降
 
 ### 步驟 3：狀態與檢查點
@@ -76,7 +81,7 @@ def run_tool(session, name: str, args: dict):
         session.set_status("waiting_approval", pending=(name, args))
         raise PauseForApproval                  # 存檔後停下，確認後由 resume 接著跑
     result = tool.fn(**args)
-    result = trim_to_budget(result, max_tokens=2000)
+    result = trim_result(result, max_tokens=2000)
     for hook in POST_HOOKS:                     # 記 log、統計 tokens 與耗時
         hook(session, tool, args, result)
     return result

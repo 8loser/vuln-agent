@@ -1,6 +1,7 @@
 # src/vuln_agent/agent.py
 import json, logging, time
 
+from vuln_agent.context import compact, trim_result
 from vuln_agent.llm import client, cost, DEFAULT_MODEL
 from vuln_agent.tools import TOOLS, ToolError, call_tool, schemas
 
@@ -13,10 +14,12 @@ SYSTEM = """你是漏洞情資助理，用繁體中文回答，漏洞資料一�
 - 工具回傳錯誤時，依錯誤訊息修正參數再試；查不到就說資料庫裡查不到
 - 說明順序：先講在 KEV（已被利用）的，再講 EPSS 高的"""
 
-def run_agent(question: str, tools=TOOLS, model: str = DEFAULT_MODEL, max_steps: int = 8, timeout: float = 120):
+def run_agent(question: str, tools=TOOLS, model: str = DEFAULT_MODEL, max_steps: int = 8, timeout: float = 120,
+              trim_tokens: int | None = None, context_tokens: int | None = None):
     """手寫的 tool-use loop，每發生一件事就 yield 一個 (事件, 資料)：
     text（模型的文字，逐段）、tool_use（要呼叫的工具與參數）、tool_result（工具結果）、done（停止原因與總計）。
-    停止條件：模型不再要求呼叫工具、達到 max_steps、超過 timeout 秒。"""
+    停止條件：模型不再要求呼叫工具、達到 max_steps、超過 timeout 秒。
+    階段 3 的 context 管理（預設關閉）：trim_tokens 是單一工具結果的上限，context_tokens 是整段對話的上限。"""
     messages = [{"role": "user", "content": question}]
     tool_schemas = schemas(tools)
     usages, start, stop = [], time.time(), "max_steps"
@@ -24,6 +27,9 @@ def run_agent(question: str, tools=TOOLS, model: str = DEFAULT_MODEL, max_steps:
         if time.time() - start > timeout:
             stop = "timeout"
             break
+        if context_tokens and (compacted := compact(messages, context_tokens)) is not messages:
+            log.info(json.dumps({"step": step, "compacted_messages": len(messages)}, ensure_ascii=False))
+            messages = compacted
         t = time.time()
         with client.messages.stream(model=model, max_tokens=2048, system=SYSTEM,
                                     tools=tool_schemas, messages=messages) as stream:
@@ -39,8 +45,10 @@ def run_agent(question: str, tools=TOOLS, model: str = DEFAULT_MODEL, max_steps:
                 yield "tool_use", {"name": block.name, "input": block.input}
                 t_tool = time.time()
                 try:
-                    content, is_error = json.dumps(call_tool(tools, block.name, block.input),
-                                                   ensure_ascii=False, default=str), False
+                    result = call_tool(tools, block.name, block.input)
+                    if trim_tokens:  # 接進 messages 之前就裁好，歷史只追加、不改寫
+                        result = trim_result(result, trim_tokens)
+                    content, is_error = json.dumps(result, ensure_ascii=False, default=str), False
                 except Exception as e:  # 錯誤也包成 tool result 回給模型，loop 不中斷
                     if not isinstance(e, ToolError):
                         log.exception("工具 %s 執行失敗", block.name)

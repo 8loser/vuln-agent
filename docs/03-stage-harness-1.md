@@ -13,9 +13,17 @@
 - **權限分級**：依副作用把工具分成唯讀、寫入、對外三級，分別對應允許、詢問、拒絕。這是 agent 能放心交給別人用的前提，也是階段 7 防護的基礎。
 - **Hooks 讓規則寫在模型之外**：在工具執行前後插入確定性的程式碼，負責記 log、檢查參數、擋掉危險操作。prompt 寫「不要做」不保證有效，hook 擋下來的就一定擋得住。
 
+### 開始前
+
+所有指令都在 repo 根目錄執行。
+
+1. 裝好 [Trivy](https://trivy.dev/docs/latest/getting-started/installation/)。Trivy 是獨立的命令列工具，不在 `uv sync` 的套件裡；官方安裝頁有 Debian/Ubuntu、Homebrew、Windows、Arch Linux 等做法，依作業系統選一種。第一次掃描會先下載漏洞資料庫，要連網
+2. `docker compose up -d` 起 PostgreSQL，步驟 2 起報告會存進資料庫
+3. `mkdir -p data/reports/trivy` 建報告目錄，Trivy 的 `--output` 不會自動建目錄
+
 ### 步驟 1：準備測試報告與量出基準
 
-- 用 Trivy 掃自己的 Docker image，輸出 JSON：例如 `trivy image --format json --output data/reports/trivy-myapp.json <你的 image>`。想要多一點結果，可以用舊版 base image 另 build 一個練習用 image。只掃自己的 image，`data/reports/` 加進 `.gitignore`（參數以 Trivy 官方文件為準）
+- 用 Trivy 掃自己的 Docker image，輸出 JSON：例如 `trivy image --format json --output data/reports/trivy/myapp.json <你的 image>`。image 名稱要寫成「repository:tag」，例如 `postgres:16-alpine`，也就是 `docker image ls` 的 REPOSITORY 和 TAG 兩欄用冒號接起來；只寫 tag 時 Docker 會把它當成 repository 名稱，找不到 image。想要多一點結果，可以用舊版 base image 另 build 一個練習用 image。只掃自己的 image，`data/reports/` 加進 `.gitignore`（參數以 Trivy 官方文件為準）
 - 寫小腳本統計報告內容：各 severity 筆數、不重複 CVE 數、有 `FixedVersion` 的比例，再算一下整份 JSON 有多少 tokens
 - 新增工具 `read_scan_report(path)`，先寫成最天真的版本，直接回傳整份 JSON
 - 準備 5 題報告相關問題（例如「有幾個 Critical？」「哪些在 KEV 裡、要先修？」「openssl 相關的有哪些、修到哪一版？」），寫進 `evals/report.jsonl`，附上用 SQL 或腳本算出的標準答案

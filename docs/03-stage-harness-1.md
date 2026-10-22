@@ -26,7 +26,7 @@
 - 用 Trivy 掃自己的 Docker image，輸出 JSON：例如 `trivy image --format json --output data/reports/trivy/myapp.json <你的 image>`。image 名稱要寫成「repository:tag」，例如 `postgres:16-alpine`，也就是 `docker image ls` 的 REPOSITORY 和 TAG 兩欄用冒號接起來；只寫 tag 時 Docker 會把它當成 repository 名稱，找不到 image。想要多一點結果，可以用舊版 base image 另 build 一個練習用 image。只掃自己的 image，`data/reports/` 加進 `.gitignore`（參數以 Trivy 官方文件為準）
 - 寫小腳本統計報告內容：各 severity 筆數、不重複 CVE 數、有 `FixedVersion` 的比例，再算一下整份 JSON 有多少 tokens。token 數由模型的 tokenizer 決定，tokenizer 會隨模型版本更新，所以要用實際呼叫的模型來算，換模型就重量，說明在 notebook 1.2
 - 新增工具 `read_scan_report(path)`，先寫成最天真的版本，直接回傳整份 JSON
-- 準備 5 題報告相關問題（例如「有幾個 Critical？」「哪些在 KEV 裡、要先修？」「openssl 相關的有哪些、修到哪一版？」），寫進 `evals/report.jsonl`，附上用 SQL 或腳本算出的標準答案
+- 準備 5 題報告相關問題（例如「有幾個 Critical？」「哪些在 KEV 裡、要先修？」「openssl 相關的有哪些、修到哪一版？」），附上用 SQL 或腳本算出的標準答案
 - 用天真版跑這 5 題，記錄每題的 input tokens、花費、延遲、答對與否；如果超過模型的 context 上限或直接報錯，也記下來
 
 ### 步驟 2：Context 管理：裁剪、摘要、token 預算

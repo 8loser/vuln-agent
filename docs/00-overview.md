@@ -26,7 +26,7 @@
 | [8](08-stage-finetune.md) | 開源模型、QLoRA 微調 | 微調 text-to-SQL，對大模型 API 比正確率、延遲、成本 | [08_finetune](../notebooks/08_finetune.ipynb) |
 | [9](09-stage-deploy.md) | 自架推論、私有化部署、產品化 | vLLM 自架、Docker 部署到雲端（mTLS）、Web UI、README 與 demo 影片 | |
 
-每個階段一份文件：目標、概念、步驟、完成標準。程式都已經寫好，文件說明每一步要理解什麼、該讀哪些程式；有實驗性質的階段另附一份 notebook，Markdown 格說明用到哪些程式，程式格直接跑，用實驗觀察程式與模型的行為。
+每個階段一份文件，至少有目標、概念、步驟、總結。程式都已經寫好，文件說明每一步要理解什麼、該讀哪些程式；有實驗性質的階段另附一份 notebook，Markdown 格說明用到哪些程式，程式格直接跑，用實驗觀察程式與模型的行為。
 
 ### Repo 結構
 

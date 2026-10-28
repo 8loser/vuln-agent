@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from vuln_agent import report
-from vuln_agent.context import CHARS_PER_TOKEN, compact, estimate_tokens, trim_result
+from vuln_agent.context import compact, estimate_tokens, trim_result
 from vuln_agent.db import connect
 from vuln_agent.report import NAIVE_REPORT_TOOLS, REPORT_TOOLS
 from vuln_agent.tools import ToolError, call_tool, query
@@ -86,12 +86,12 @@ def test_trim_result_cuts_longest_list_and_says_so():
     rows = [{"id": i, "pad": "x" * 100} for i in range(1000)]
     r = trim_result({"total": 1000, "rows": rows}, max_tokens=500)
     assert 0 < len(r["rows"]) < 1000 and r["total"] == 1000 and "已截斷" in r["note"]
-    assert estimate_tokens(r) <= 500 + 50  # note 本身多出的一點
+    assert estimate_tokens(r) <= 500  # 連 note 一起算都不超過上限
     assert trim_result({"rows": [1]}, max_tokens=500) == {"rows": [1]}
 
 def test_trim_result_falls_back_to_text_when_first_row_too_big():
     r = trim_result({"Results": [{"pad": "x" * 10_000}]}, max_tokens=100)
-    assert len(r["partial_json"]) == int(100 * CHARS_PER_TOKEN) and "已截斷" in r["note"]
+    assert estimate_tokens(r) <= 100 and r["partial_json"].startswith('{"Results"') and "已截斷" in r["note"]
 
 def tool_round(i: int, size: int) -> list:
     """一輪工具呼叫：assistant 的 text 與 tool_use（SDK 物件的樣子），加上 user 的 tool_result。"""

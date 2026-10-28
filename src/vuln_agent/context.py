@@ -24,16 +24,22 @@ def trim_result(result: dict, max_tokens: int) -> dict:
     if lists:
         key = max(lists, key=lambda k: len(to_json(result[k])))
         rows, out = result[key], {k: v for k, v in result.items() if k != key}
-        kept, used = [], len(to_json(out))
+        note = lambda n: f"已截斷：{key} 只回傳 {n} / {len(rows)} 筆，請用篩選條件或分頁縮小範圍"
+        # 先扣掉 note 與清單本身的長度（用最多位數的筆數估），裁完的結果才不會超過 max_tokens
+        kept, used = [], len(to_json({**out, key: [], "note": note(len(rows))}))
         for row in rows:
-            used += len(to_json(row))
+            used += len(to_json(row)) + 2  # 清單元素之間的 ", "
             if used > budget:
                 break
             kept.append(row)
         if kept:
-            return {**out, key: kept, "note": f"已截斷：{key} 只回傳 {len(kept)} / {len(rows)} 筆，請用篩選條件或分頁縮小範圍"}
-    return {"partial_json": to_json(result)[:budget],
-            "note": f"已截斷：結果約 {estimate_tokens(result)} tokens，只保留開頭，請用篩選條件縮小範圍"}
+            return {**out, key: kept, "note": note(len(kept))}
+    note = f"已截斷：結果約 {estimate_tokens(result)} tokens，只保留開頭，請用篩選條件縮小範圍"
+    text, room = to_json(result), budget - len(to_json({"partial_json": "", "note": note}))
+    cut = room
+    while len(to_json(text[:cut])) - 2 > room:  # 字串再序列化時引號會跳脫成 \"，要用跳脫後的長度比
+        cut -= len(to_json(text[:cut])) - 2 - room
+    return {"partial_json": text[:cut], "note": note}
 
 def compact(messages: list, max_tokens: int) -> list:
     """simple compaction：估算超過 max_tokens 時，把整段對話換成一則 user 訊息，從這則摘要重新開始。

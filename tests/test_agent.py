@@ -3,6 +3,7 @@ from contextlib import contextmanager
 from types import SimpleNamespace
 
 from vuln_agent import agent
+from vuln_agent.tools import Args, Tool
 
 USAGE = SimpleNamespace(input_tokens=100, output_tokens=10,
                         cache_read_input_tokens=0, cache_creation_input_tokens=0)
@@ -44,3 +45,18 @@ def test_stops_at_max_steps(monkeypatch):
     r = agent.ask("一直呼叫工具", max_steps=3)
     assert r["stop"] == "max_steps" and r["steps"] == 3 and "查詢未完成" in r["answer"]
     assert all(c["is_error"] for c in r["tool_calls"])
+
+def test_empty_answer_states_stop_reason(monkeypatch):
+    empty = SimpleNamespace(content=[], stop_reason="end_turn", usage=USAGE)
+    client, _ = fake_client([empty])
+    monkeypatch.setattr(agent, "client", client)
+    r = agent.ask("有幾個 Critical？")
+    assert r["answer"] == "模型沒有產生回答（stop_reason：end_turn，回應內容：沒有任何 block）。"
+
+def test_counts_trimmed_results(monkeypatch):
+    big = Tool("big", "回傳很多列", Args, lambda: {"rows": [{"pad": "x" * 100}] * 100})
+    final = SimpleNamespace(content=[SimpleNamespace(type="text", text="好")], stop_reason="end_turn", usage=USAGE)
+    client, sent = fake_client([tool_use(1, "big", {}), final])
+    monkeypatch.setattr(agent, "client", client)
+    r = agent.ask("給我全部", tools={"big": big}, trim_tokens=500)
+    assert r["trimmed"] == 1 and r["compacted"] == 0 and "已截斷" in sent[1][-1]["content"][0]["content"]

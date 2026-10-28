@@ -9,6 +9,7 @@
 - **Context 是有限又要花錢的資源**：每一輪都會把整段歷史重送一次，工具結果越長，成本和延遲越高，答案品質也可能變差，模型容易漏看中間的內容。
 - **工具結果要先裁剪再回給模型**：回摘要、前 N 筆和分頁游標，完整資料存在資料庫，模型需要時再查。這是 harness 的責任，不能指望模型自己忽略。
 - **Token 預算與壓縮**：替單一工具結果和整段對話各設上限，超過時把舊的輪次壓成摘要，並決定哪些內容不能丟（使用者原始問題、已確認的結論）。
+- **答錯時先查 harness，再怪模型**：空白或錯誤的回答，常見原因是輸出被 `max_tokens` 截斷、工具沒有執行、結果被裁掉，這些都要從 `stop_reason`、`output_tokens` 與工具呼叫紀錄確認。所以每次執行都要記下這些數字，而且存進檔案或資料庫，事後才查得出原因。
 - **檢查點讓 agent 可以續跑**：每一步之後把狀態寫進資料庫，程式掛掉、API 逾時或等人工確認時，都能從上一步接著做，不用重花 token。
 - **權限分級**：依副作用把工具分成唯讀、寫入、對外三級，分別對應允許、詢問、拒絕。這是 agent 能放心交給別人用的前提，也是階段 7 防護的基礎。
 - **Hooks 讓規則寫在模型之外**：在工具執行前後插入確定性的程式碼，負責記 log、檢查參數、擋掉危險操作。prompt 寫「不要做」不保證有效，hook 擋下來的就一定擋得住。
@@ -28,19 +29,20 @@
 - 寫小腳本統計報告內容：各 severity 筆數、不重複 CVE 數、有 `FixedVersion` 的比例，再算一下整份 JSON 有多少 tokens。token 數由模型的 tokenizer 決定，tokenizer 會隨模型版本更新，所以要用實際呼叫的模型來算，換模型就重量，說明在 notebook 1.2
 - 讀 [`src/vuln_agent/report.py`](../src/vuln_agent/report.py) 的 `read_scan_report()`：最天真的版本，直接回傳整份 JSON；`report_path()` 只接受 `data/reports/` 底下的檔案，模型傳 `../.env` 這類路徑會收到錯誤
 - 準備 5 題報告相關問題（例如「有幾個 Critical？」「哪些在 KEV 裡、要先修？」「openssl 相關的有哪些、修到哪一版？」），附上用 SQL 或腳本算出的標準答案；每題要考什麼、觀察什麼，見 notebook 1.3
-- 用天真版跑這 5 題，記錄每題的 input tokens、花費、延遲、答對與否；如果超過模型的 context 上限或直接報錯，也記下來。notebook 1.4 的 `run_case()` 用 [`src/vuln_agent/agent.py`](../src/vuln_agent/agent.py) 的 `ask()` 跑一題，三種策略的工具組合與參數寫在 `STRATEGIES`
+- 用天真版跑這 5 題，記錄每題的 input tokens、花費、延遲、答對與否；如果超過模型的 context 上限或直接報錯，也記下來。notebook 1.4 的 `run_case()` 用 [`src/vuln_agent/agent.py`](../src/vuln_agent/agent.py) 的 `ask()` 跑一題，三種策略的工具組合與參數寫在 `STRATEGIES`；每題結果追加寫進 `data/results/03_context_budget.jsonl`，付費跑出的結果不會因為 kernel 重啟而遺失
 
 ### 步驟 2：Context 管理：裁剪、摘要、token 預算
 
 - 讀 [`src/vuln_agent/report.py`](../src/vuln_agent/report.py)：
-  - `parse_trivy()`：把報告攤平成一列一筆（CVE、套件、來源套件、目前版本、修補版本、severity）。來源套件只記在 `Results[].Packages[]` 的 `SrcName`，例如 Alpine 的 `libssl3`、`libcrypto3` 都來自 openssl，問「openssl 相關的」要靠它
+  - `parse_trivy()`：把報告攤平成一列一筆（CVE、套件、來源套件、目前版本、修補版本、severity）。來源套件只記在 `Results[].Packages[]` 的 `SrcName`，例如 Alpine 的 `libssl3`、`libcrypto3` 都來自 openssl，問「openssl 相關的」要靠它。沒留下的欄位（描述、各家的 CVSS、參考連結）模型就看不到，保留哪些欄位是在 token 與資訊量之間取捨
   - `import_report()`：用 `vuln_etl` 把攤平的列存進 `findings` 表，只回傳 `report_id` 和統計摘要（各等級筆數、最嚴重的前 10 筆）
   - `query_findings()`：依 severity、套件、是否在 KEV 篩選，`limit` 有上限，回傳結果附 `total` 和 `next_cursor`，讓模型知道還有多少筆沒看；`total` 在套用 cursor 之前算，每一頁拿到的都是全部符合的筆數。分組計數這類統計，模型用 `run_sql` 查 `findings` 表
 - 讀 [`src/vuln_agent/context.py`](../src/vuln_agent/context.py)：
-  - `trim_result()`：通用的工具結果裁剪，超過預算就從最長的清單尾端截掉，並寫明「已截斷，只回傳 X / Y 筆，請用篩選條件或分頁縮小範圍」。`run_agent()` 收到 `trim_tokens` 時，在工具結果接進 messages 之前就裁好
+  - `trim_result()`：通用的工具結果裁剪，超過預算就從最長的清單尾端截掉，並寫明「已截斷，只回傳 X / Y 筆，請用篩選條件或分頁縮小範圍」。呼叫 `run_agent()` 時給了 `trim_tokens`（單一工具結果的 token 上限），在工具結果接進 messages 之前就裁好
   - `estimate_tokens()`：依字元數粗估 token。`CHARS_PER_TOKEN` 用 `count_tokens` 實測，JSON 約 1.8 字元一個 token，換模型要重量
   - `compact()`：對話層級的 token 預算。`run_agent()` 收到 `context_tokens` 時，每輪呼叫前估算對話大小，超過就把整段換成一則摘要訊息（原始問題、已說過的結論、每次工具呼叫的一行紀錄、最近一次的工具結果），從摘要重新開始。只把較早的工具結果換成摘要、其他訊息照留，會改寫到被 thinking block 綁定的歷史，Sonnet 5.5 這類模型會拒絕或丟掉推理內容；原因與 API 內建的 context editing、compaction 對照在 notebook 2.2
-- 實驗：天真版、裁剪版、裁剪加壓縮版各跑一次 5 題，做一張表比較每題 tokens、花費、延遲、答對數；另外刻意把對話拉長到 20 輪，觀察答案品質何時開始下降
+- 實驗：天真版、裁剪版、裁剪加壓縮版各跑一次 5 題，做一張表比較每題 tokens、花費、延遲、答對數。`ask()` 的結果附上 `trimmed`（裁了幾個工具結果）與 `compacted`（壓縮了幾次），用來判斷省下的 token 來自裁剪、壓縮，還是攤平與篩選查詢；另外刻意把對話拉長到 20 輪，觀察答案品質何時開始下降
+- 判讀結果：答錯或答不出來時，先排除 harness 的問題，再歸因到模型或策略。依序看 `stop`（是不是 `end_turn`）、有沒有被截斷（`output_tokens` 是否接近 `MAX_TOKENS`）、工具有沒有真的執行（`steps` 與工具呼叫紀錄），最後才看模型本身。例如天真版的 KEV 題曾經回答空白，看起來像是 context 太大讓模型答不出來，實際原因是 `stop` 為 `max_tokens`：模型思考後要把報告裡幾十個 CVE 當工具參數，寫到一半就用完了輸出上限，被截斷的 tool_use 無法執行。thinking、文字與工具參數共用 `max_tokens`，上限要依「思考加上最大的工具參數」來估
 
 ### 步驟 3：狀態與檢查點
 

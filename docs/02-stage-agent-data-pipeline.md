@@ -87,7 +87,7 @@
 
 - 讀 [`src/vuln_agent/agent.py`](../src/vuln_agent/agent.py)：
   - `SYSTEM`：保留階段 1 的規則，只能提工具結果裡的 CVE、拒絕 exploit 與範圍外問題，另外要求依錯誤訊息修正參數
-  - `run_agent()`：generator，每發生一件事就 yield 一個事件（`text`、`tool_use`、`tool_result`、`done`），串流和非串流共用。工具丟任何例外都包成 `is_error` 的 tool result 送回模型；停止條件是模型答完、`max_steps`（預設 8）、`timeout`（預設 120 秒），單一工具的逾時由資料庫的 `statement_timeout` 負責。`stop_reason` 是 `refusal` 時，代表請求被 API 的安全分類器擋下、回答是空的，補上固定的拒絕說明 `REFUSAL`（跟階段 1 `parse()` 改回 `unsupported` 的處理一致），攻擊類問題多半在這一步就被擋下，還沒用到 `SYSTEM` 的拒絕規則。每一步寫一行 JSON log（工具、參數、耗時、tokens、花費），結束時再寫一行總計
+  - `run_agent()`：generator，每發生一件事就 yield 一個事件（`text`、`tool_use`、`tool_result`、`done`），串流和非串流共用。工具丟任何例外都包成 `is_error` 的 tool result 送回模型；停止條件是模型答完、`max_steps`（預設 8）、`timeout`（預設 120 秒），每次回應的輸出上限是 `MAX_TOKENS`（thinking、文字與工具參數共用），單一工具的逾時由資料庫的 `statement_timeout` 負責。`stop_reason` 是 `refusal` 時，代表請求被 API 的安全分類器擋下、回答是空的，補上固定的拒絕說明 `REFUSAL`（跟階段 1 `parse()` 改回 `unsupported` 的處理一致），攻擊類問題多半在這一步就被擋下，還沒用到 `SYSTEM` 的拒絕規則。其他情況下最後一次回應沒有文字時，補上一句寫明 `stop_reason` 與回應裡有哪些 block（例如被 `max_tokens` 截斷的 `tool_use`），空白回答才查得出原因。每一步寫一行 JSON log（工具、參數、耗時、tokens、花費），結束時再寫一行總計
   - `ask()`：跑完整個迴圈，收成一個結果
 - 讀 [`src/vuln_agent/agent_api.py`](../src/vuln_agent/agent_api.py)：`/ask` 回傳回答與每次工具呼叫，`/ask/stream` 用 SSE 送出每個事件
 - 讀 [`tests/test_agent.py`](../tests/test_agent.py)：用假的 client 測「參數錯誤變成 error result、模型接著回答」「被拒絕時補上說明」和「撞到最大步數會停」，不花錢

@@ -6,6 +6,9 @@ from vuln_agent.llm import client, cost, DEFAULT_MODEL
 from vuln_agent.tools import TOOLS, ToolError, call_tool, schemas
 
 log = logging.getLogger("vuln_agent")
+# 每次回應的輸出上限，thinking、文字與 tool_use 的參數共用；只依實際輸出收費。
+# 階段 3 天真版要把報告裡幾十個 CVE 當工具參數，2048 不夠，會在寫參數途中被截斷（notebook 03 的 1.4）
+MAX_TOKENS = 16000
 REFUSAL = "這個問題超出漏洞情資助理的範圍：只能查詢漏洞資料與修補優先順序，不提供攻擊程式、payload 或繞過防護的方法。"
 
 SYSTEM = """你是漏洞情資助理，用繁體中文回答，漏洞資料一律用工具查。
@@ -19,19 +22,22 @@ def run_agent(question: str, tools=TOOLS, model: str = DEFAULT_MODEL, max_steps:
     """手寫的 tool-use loop，每發生一件事就 yield 一個 (事件, 資料)：
     text（模型的文字，逐段）、tool_use（要呼叫的工具與參數）、tool_result（工具結果）、done（停止原因與總計）。
     停止條件：模型不再要求呼叫工具、達到 max_steps、超過 timeout 秒。
-    階段 3 的 context 管理（預設關閉）：trim_tokens 是單一工具結果的上限，context_tokens 是整段對話的上限。"""
+    階段 3 的 context 管理（預設關閉）：trim_tokens 是單一工具結果的上限，context_tokens 是整段對話的上限；
+    done 的總計附上 trimmed（裁了幾個工具結果）與 compacted（壓縮了幾次），才分得出省下的 token 來自哪裡。"""
     messages = [{"role": "user", "content": question}]
     tool_schemas = schemas(tools)
     usages, start, stop = [], time.time(), "max_steps"
+    trimmed = compacted = 0
     for step in range(1, max_steps + 1):
         if time.time() - start > timeout:
             stop = "timeout"
             break
-        if context_tokens and (compacted := compact(messages, context_tokens)) is not messages:
+        if context_tokens and (shorter := compact(messages, context_tokens)) is not messages:
             log.info(json.dumps({"step": step, "compacted_messages": len(messages)}, ensure_ascii=False))
-            messages = compacted
+            messages = shorter
+            compacted += 1
         t = time.time()
-        with client.messages.stream(model=model, max_tokens=2048, system=SYSTEM,
+        with client.messages.stream(model=model, max_tokens=MAX_TOKENS, system=SYSTEM,
                                     tools=tool_schemas, messages=messages) as stream:
             for chunk in stream.text_stream:
                 yield "text", chunk
@@ -46,8 +52,8 @@ def run_agent(question: str, tools=TOOLS, model: str = DEFAULT_MODEL, max_steps:
                 t_tool = time.time()
                 try:
                     result = call_tool(tools, block.name, block.input)
-                    if trim_tokens:  # 接進 messages 之前就裁好，歷史只追加、不改寫
-                        result = trim_result(result, trim_tokens)
+                    if trim_tokens and (cut := trim_result(result, trim_tokens)) is not result:
+                        result, trimmed = cut, trimmed + 1  # 接進 messages 之前就裁好，歷史只追加、不改寫
                     content, is_error = json.dumps(result, ensure_ascii=False, default=str), False
                 except Exception as e:  # 錯誤也包成 tool result 回給模型，loop 不中斷
                     if not isinstance(e, ToolError):
@@ -64,16 +70,20 @@ def run_agent(question: str, tools=TOOLS, model: str = DEFAULT_MODEL, max_steps:
                              "cost_usd": round(cost(resp.usage, model), 6)}, ensure_ascii=False))
         if resp.stop_reason != "tool_use":
             stop = resp.stop_reason
+            answered = any(b.type == "text" and b.text.strip() for b in resp.content)
             break
     if stop in ("max_steps", "timeout"):
         reason = f"已達最大步數 {max_steps}" if stop == "max_steps" else f"超過 {timeout} 秒"
         yield "text", f"\n\n查詢未完成：{reason}，以上是目前查到的部分。"
     elif stop == "refusal":  # 被安全分類器擋下時回答是空的，補上跟 SYSTEM 拒絕規則一致的說明（同 intent.py 的處理）
         yield "text", REFUSAL
+    elif not answered:  # 最後一次回應沒有文字時寫明停止原因與回應裡有哪些 block，空白回答才查得出原因
+        blocks = "、".join(b.type for b in resp.content) or "沒有任何 block"
+        yield "text", f"模型沒有產生回答（stop_reason：{stop}，回應內容：{blocks}）。"
     summary = {"stop": stop, "steps": len(usages), "seconds": round(time.time() - start, 2),
                "input_tokens": sum(u.input_tokens for u in usages),
                "output_tokens": sum(u.output_tokens for u in usages),
-               "cost_usd": round(sum(cost(u, model) for u in usages), 6)}
+               "cost_usd": round(sum(cost(u, model) for u in usages), 6), "trimmed": trimmed, "compacted": compacted}
     log.info(json.dumps({"question": question, **summary}, ensure_ascii=False))
     yield "done", summary
 
